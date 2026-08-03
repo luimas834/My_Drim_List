@@ -3,3 +3,5 @@ node_modules/
 dist/
 *.log
 docs/
+.github/
+*.DS_Store
