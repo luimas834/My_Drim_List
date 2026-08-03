@@ -24,4 +24,25 @@ router.get("/:episodeId/discussions", async (req, res) => {
   }
 });
 
+//POST /api/episodes/:episodeId/discussions — comment on an episode
+router.post("/:episodeId/discussions", auth, async (req, res) => {
+  try {
+    const { comment } = req.body;
+    if (!comment) return res.status(400).json({ error: "comment is required" });
+
+    const { rows } = await db.query(
+      `INSERT INTO episode_discussions (episode_id, user_id, comment)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [req.params.episodeId, req.userId, comment]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    //the FK to episodes is what tells us the episode does not exist
+    if (e.code === "23503") return res.status(404).json({ error: "Episode not found" });
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;
