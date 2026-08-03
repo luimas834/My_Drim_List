@@ -47,4 +47,42 @@ router.delete("/users/:id/follow", auth, async (req, res) => {
   }
 });
 
+//GET /api/notifications — my notifications, newest first
+router.get("/notifications", auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT notification_id, user_id, type, message, is_read, created_at
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC, notification_id DESC`,
+      [req.userId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+//PATCH /api/notifications/:id/read — mark one of my notifications as read
+router.patch("/notifications/:id/read", auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `UPDATE notifications
+       SET is_read = TRUE
+       WHERE notification_id = $1 AND user_id = $2
+       RETURNING *`,
+      [req.params.id, req.userId]
+    );
+
+    //no row means it does not exist or belongs to someone else
+    if (!rows[0]) return res.status(404).json({ error: "Notification not found" });
+
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;
