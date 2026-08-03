@@ -30,7 +30,7 @@ Unlike conventional web applications that rely on Object-Relational Mappers (ORM
 ## ✨ Features & Functionality
 
 ### 1. Database Foundation & Schema
-* **13 Core Entities:** `users`, `anime`, `genres`, `anime_genres`, `studios`, `anime_studios`, `episodes`, `watchlist`, `reviews`, `review_votes`, `episode_discussions`, `followers`, `activity_log`, `notifications`.
+* **14 Core Entities:** `users`, `anime`, `genres`, `anime_genres`, `studios`, `anime_studios`, `episodes`, `watchlist`, `reviews`, `review_votes`, `episode_discussions`, `followers`, `activity_log`, `notifications`.
 * **Automated Data Seeding (`seed.js`):** Node script that pages through the Jikan API to populate real anime, genres, studios, and episode records.
 * **Real-time Views & Ranking:**
   * `anime_card_view`: Regular view flattening anime details with concatenated genres and studios (`STRING_AGG`).
@@ -54,20 +54,36 @@ Unlike conventional web applications that rely on Object-Relational Mappers (ORM
   * **Finish Date Stamping (`fn_set_finish_date`):** Automatically sets `finished_at = CURRENT_DATE` upon completion.
   * **Audit Logging (`fn_log_watchlist`):** Logs all watchlist actions directly into `activity_log`.
 
+### 5. Reviews & Helpful Voting
+* **Review CRUD:** One review per user per anime, enforced by a `UNIQUE (user_id, anime_id)` constraint.
+* **Completion Guard (`fn_review_guard`):** A `BEFORE INSERT` trigger `RAISE EXCEPTION`s unless the user has completed the anime — the API never pre-checks this in JavaScript, it simply converts the database error into HTTP 400.
+* **Live Score Aggregation (`fn_update_anime_score`):** Every insert, update, or delete recomputes `anime.score` as the average of its reviews.
+* **Edit Detection (`fn_flag_review_edited`):** A conditional (`WHEN`) trigger sets `is_edited` and `edited_at` only when the body or score actually changes.
+* **Helpful Votes:** `POST /api/reviews/:id/helpful` calls the `cast_helpful_vote` stored procedure, which handles duplicate and invalid votes with `EXCEPTION` blocks; a companion trigger keeps `helpful_count` in sync.
+
+### 6. Social Graph & Notifications
+* **Follow / Unfollow:** Self-referential M:N relationship on `followers`, guarded at two layers — a declarative `CHECK (follower_id <> following_id)` and the `fn_block_self_follow` trigger.
+* **Trigger-Written Notifications:** No route ever inserts a notification. `fn_notify_new_follower` fires on a new follow, and `fn_notify_new_review` fans a review out to every follower of the reviewer.
+* **Notification Inbox:** Users list their own notifications and mark them read; ownership is enforced in the SQL `WHERE` clause rather than in application code.
+
+### 7. Episode Discussions
+* **Per-Episode Threads:** Public read, authenticated write, ordered oldest-first and joined to usernames in a single query.
+* **Referential Integrity:** A missing episode surfaces as a foreign key violation (`23503`) mapped to HTTP 404, and `ON DELETE CASCADE` clears threads when an anime or episode is removed.
+
 ---
 
 ## ⚡ Database Logic & Trigger Summary
 
-All SQL scripts reside in [backend/sql/](file:///e:/Shared/Projects/My_Drim_List/backend/sql):
+All SQL scripts reside in [backend/sql/](backend/sql):
 
 | File | Purpose |
 |---|---|
-| [01_schema.sql](file:///e:/Shared/Projects/My_Drim_List/backend/sql/01_schema.sql) | DDL tables, PK/FK relationships, cascading deletes, indexes |
-| [02_triggers.sql](file:///e:/Shared/Projects/My_Drim_List/backend/sql/02_triggers.sql) | 10 Automated triggers (scoring, guards, episode check, audit logging, notifications) |
-| [03_functions.sql](file:///e:/Shared/Projects/My_Drim_List/backend/sql/03_functions.sql) | PL/pgSQL functions (`get_user_stats`, explicit cursor recommendation engine `recommend_anime`, keyset pagination `get_watch_history`) |
-| [04_procedures.sql](file:///e:/Shared/Projects/My_Drim_List/backend/sql/04_procedures.sql) | Stored procedures (`cast_helpful_vote`, `bulk_drop_inactive`) |
-| [05_views.sql](file:///e:/Shared/Projects/My_Drim_List/backend/sql/05_views.sql) | Views (`anime_card_view`) and Materialized Views (`top_by_genre`) |
-| [seed.js](file:///e:/Shared/Projects/My_Drim_List/backend/sql/seed.js) | Jikan API data fetching and PostgreSQL population script |
+| [01_schema.sql](backend/sql/01_schema.sql) | DDL tables, PK/FK relationships, cascading deletes, indexes |
+| [02_triggers.sql](backend/sql/02_triggers.sql) | 11 Automated triggers (scoring, guards, episode check, audit logging, notifications) |
+| [03_functions.sql](backend/sql/03_functions.sql) | PL/pgSQL functions (`get_user_stats`, explicit cursor recommendation engine `recommend_anime`, keyset pagination `get_watch_history`) |
+| [04_procedures.sql](backend/sql/04_procedures.sql) | Stored procedures (`cast_helpful_vote`, `bulk_drop_inactive`) |
+| [05_views.sql](backend/sql/05_views.sql) | Views (`anime_card_view`) and Materialized Views (`top_by_genre`) |
+| [seed.js](backend/sql/seed.js) | Jikan API data fetching and PostgreSQL population script |
 
 ---
 
@@ -92,6 +108,23 @@ All SQL scripts reside in [backend/sql/](file:///e:/Shared/Projects/My_Drim_List
 * `POST /api/watchlist` — Add or upsert anime in watchlist (`{anime_id, status}`)
 * `PATCH /api/watchlist/:animeId` — Partial update (`{status?, episodes_watched?, user_score?}`)
 * `DELETE /api/watchlist/:animeId` — Remove anime from watchlist
+
+### Review Routes (`/api/reviews`)
+* `GET /api/reviews/anime/:animeId` — List an anime's reviews with usernames, newest first
+* `POST /api/reviews` — Write a review (`{anime_id, body, score}`) — 400 if the anime is not completed *(Protected)*
+* `PATCH /api/reviews/:reviewId` — Edit your own review (`{body?, score?}`) *(Protected)*
+* `DELETE /api/reviews/:reviewId` — Delete your own review *(Protected)*
+* `POST /api/reviews/:reviewId/helpful` — Mark a review helpful via `cast_helpful_vote` *(Protected)*
+
+### Social Routes (`/api`) *(Protected)*
+* `POST /api/users/:id/follow` — Follow a user — 400 on self-follow, 409 if already following
+* `DELETE /api/users/:id/follow` — Unfollow a user
+* `GET /api/notifications` — List your notifications, newest first
+* `PATCH /api/notifications/:id/read` — Mark one of your notifications as read
+
+### Episode Routes (`/api/episodes`)
+* `GET /api/episodes/:episodeId/discussions` — List an episode's comments with usernames, oldest first
+* `POST /api/episodes/:episodeId/discussions` — Post a comment (`{comment}`) — 404 if the episode does not exist *(Protected)*
 
 ---
 
@@ -146,9 +179,9 @@ npm run dev
 - [x] Authentication & JWT Middleware
 - [x] Anime Catalog & Search API
 - [x] Watchlist Management & Automated DB Triggers
-- [ ] User Reviews & Review Guarding Triggers
-- [ ] Social Features (Follow/Unfollow & Follower Notifications)
-- [ ] Episode Discussion Forums
+- [x] User Reviews & Review Guarding Triggers
+- [x] Social Features (Follow/Unfollow & Follower Notifications)
+- [x] Episode Discussion Forums
 - [ ] Personalized Recommendations Engine & Profile Stats
 - [ ] Admin Maintenance Procedures
 - [ ] Complete React User Interface & UI Integration
