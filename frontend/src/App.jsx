@@ -1,127 +1,115 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React from "react";
+import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { useAuth, ProtectedRoute } from "./auth";
+import { Btn } from "./ui";
 
-function App() {
-  const [count, setCount] = useState(0)
+import Home from "./pages/Home";
+import Browse from "./pages/Browse";
+import AnimeDetail from "./pages/AnimeDetail";
+import MyList from "./pages/MyList";
+import Profile from "./pages/Profile";
+import Demo from "./pages/Demo";
+import { Login, Register } from "./pages/Auth";
+
+export default function App() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="Hero illustration" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        
-        {/* Updated header section */}
-        <div className="welcome-text">
-          <h1>Let's Get Started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Current count: {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-bg text-text flex flex-col font-sans">
+      {/* Navbar */}
+      <header className="bg-surface border-b border-line sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="text-xl font-black text-accent tracking-wide flex items-center gap-2">
+              <span>MDL</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 uppercase">
+                DBMS-II
+              </span>
+            </Link>
 
-      <div className="ticks"></div>
+            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-muted">
+              <Link to="/" className="hover:text-accent transition-colors">
+                Home
+              </Link>
+              <Link to="/browse" className="hover:text-accent transition-colors">
+                Browse
+              </Link>
+              {user && (
+                <Link to="/my-list" className="hover:text-accent transition-colors">
+                  My List
+                </Link>
+              )}
+              {user && (
+                <Link to={`/profile/${user.user_id}`} className="hover:text-accent transition-colors">
+                  Profile
+                </Link>
+              )}
+              <Link to="/demo" className="hover:text-accent transition-colors text-amber-400 font-semibold">
+                Demo & Viva
+              </Link>
+            </nav>
+          </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Find all your answers here</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank" rel="noreferrer">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn React
-              </a>
-            </li>
-          </ul>
+          <div className="flex items-center gap-3 text-sm">
+            {user ? (
+              <div className="flex items-center gap-3">
+                <Link to={`/profile/${user.user_id}`} className="font-semibold text-text hover:text-accent text-sm">
+                  {user.username}
+                </Link>
+                <Btn variant="ghost" className="py-1 px-3 text-xs" onClick={handleLogout}>
+                  Log Out
+                </Btn>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link to="/login">
+                  <Btn variant="ghost" className="py-1.5 px-3 text-xs">
+                    Log In
+                  </Btn>
+                </Link>
+                <Link to="/register">
+                  <Btn className="py-1.5 px-3 text-xs">Register</Btn>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join our growing community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
-      
-      {/* Changed to footer for semantic HTML */}
-      <footer id="spacer"></footer>
-    </>
-  )
+      {/* Main Content Container */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 pb-12">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/browse" element={<Browse />} />
+          <Route path="/anime/:id" element={<AnimeDetail />} />
+          <Route
+            path="/my-list"
+            element={
+              <ProtectedRoute>
+                <MyList />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/profile/:id" element={<Profile />} />
+          <Route path="/demo" element={<Demo />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<div className="py-12 text-center text-muted">Page not found (404)</div>} />
+        </Routes>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-line py-6 text-center text-xs text-muted">
+        <div className="max-w-6xl mx-auto px-4">
+          <p>My Drim List — DBMS-II Course Project (Thin backend, fat database)</p>
+        </div>
+      </footer>
+    </div>
+  );
 }
-
-export default App

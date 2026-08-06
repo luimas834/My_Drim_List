@@ -16,4 +16,26 @@ router.post("/refresh", async (req, res) => {
   }
 });
 
+// POST /api/admin/bulk-drop -> CALL bulk_drop_inactive(months)
+router.post("/bulk-drop", async (req, res) => {
+  try {
+    const months = req.body.months !== undefined ? parseInt(req.body.months, 10) : 6;
+    const client = await db.pool.connect();
+    let notice = null;
+    const onNotice = (m) => { notice = m.message; };
+    client.on("notice", onNotice);
+    try {
+      await client.query("CALL bulk_drop_inactive($1)", [months]);
+      res.json({ status: "ok", notice });
+    } finally {
+      client.removeListener("notice", onNotice);
+      client.release();
+    }
+  } catch (e) {
+    if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;
