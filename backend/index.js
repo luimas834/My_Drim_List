@@ -29,6 +29,8 @@ app.use("/api/watchlist", require("./routes/watchlist"));
 app.use("/api/reviews", require("./routes/reviews"));
 app.use("/api", require("./routes/social"));
 app.use("/api/episodes", require("./routes/episodes"));
+app.use("/api/users", require("./routes/users"));
+
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`MDL backend listening on http://localhost:${PORT}`));
