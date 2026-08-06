@@ -167,12 +167,13 @@ export default function Profile() {
           <Loading text="Calculating stats..." />
         ) : stats ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            <Stat label="Total Anime" value={stats.total_anime} />
-            <Stat label="Completed" value={stats.completed_anime} />
-            <Stat label="Watching" value={stats.watching_anime} />
-            <Stat label="Dropped" value={stats.dropped_anime} />
-            <Stat label="Episodes" value={stats.total_episodes_watched} />
+            <Stat label="Total Anime" value={stats.total ?? stats.total_anime ?? 0} />
+            <Stat label="Completed" value={stats.completed ?? stats.completed_anime ?? 0} />
+            <Stat label="Watching" value={stats.watching ?? stats.watching_anime ?? 0} />
+            <Stat label="Dropped" value={stats.dropped ?? stats.dropped_anime ?? 0} />
+            <Stat label="Episodes" value={stats.episodes ?? stats.total_episodes_watched ?? 0} />
             <Stat label="Mean Score" value={fmtScore(stats.mean_score)} />
+
           </div>
         ) : (
           <p className="text-sm text-muted">No stats recorded.</p>
