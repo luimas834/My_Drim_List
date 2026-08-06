@@ -182,6 +182,7 @@ npm run dev
 - [x] User Reviews & Review Guarding Triggers
 - [x] Social Features (Follow/Unfollow & Follower Notifications)
 - [x] Episode Discussion Forums
-- [ ] Personalized Recommendations Engine & Profile Stats
-- [ ] Admin Maintenance Procedures
-- [ ] Complete React User Interface & UI Integration
+- [x] Personalized Recommendations Engine & Profile Stats
+- [x] Admin Maintenance Procedures (`REFRESH MATERIALIZED VIEW` & `bulk_drop_inactive`)
+- [x] Complete React User Interface & Presentation Demo Page (`/demo`)
+
