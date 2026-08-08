@@ -38,25 +38,43 @@ const OPTS = {
 const THROTTLE_MS = 1200;
 
 // ------------------------------------------------------------- Jikan fetching
+const MAX_TRIES = 6;
+
+// Retry on anything transient: network blips, 429 rate limiting, and 5xx.
+// Jikan is a free API that returns 502/503/504 fairly regularly under load —
+// those are its problem, not ours, and they clear in seconds. Failing the whole
+// run on one of them wastes a ten-minute job.
 async function jikan(url, tries = 0) {
+  const backoff = async (why) => {
+    const wait = 2000 * Math.pow(2, tries); // 2s, 4s, 8s, 16s, 32s
+    console.log(`\n    ${why} — retry ${tries + 1}/${MAX_TRIES} in ${wait / 1000}s`);
+    await sleep(wait);
+    return jikan(url, tries + 1);
+  };
+
   let res;
   try {
     res = await fetch(url);
   } catch (e) {
-    // transient network blip — back off and retry a few times
-    if (tries < 4) {
-      await sleep(2000 * (tries + 1));
-      return jikan(url, tries + 1);
-    }
+    if (tries < MAX_TRIES) return backoff(`network error (${e.message})`);
     throw new Error(`network error for ${url}: ${e.message}`);
   }
-  if (res.status === 429 && tries < 5) {
-    await sleep(2000 * (tries + 1)); // rate limited — exponential-ish backoff
-    return jikan(url, tries + 1);
-  }
+
   if (res.status === 404) return null; // some titles genuinely have no episode list
+
+  if ((res.status === 429 || res.status >= 500) && tries < MAX_TRIES) {
+    return backoff(`Jikan ${res.status}`);
+  }
+
   if (!res.ok) throw new Error(`Jikan ${res.status} for ${url}`);
-  return res.json();
+
+  // A 200 with a truncated body throws here; treat it as transient too.
+  try {
+    return await res.json();
+  } catch (e) {
+    if (tries < MAX_TRIES) return backoff("malformed JSON response");
+    throw new Error(`bad JSON from ${url}: ${e.message}`);
+  }
 }
 
 // ------------------------------------------------------------------- Upserts
@@ -175,10 +193,20 @@ async function main() {
   );
 
   const seeded = [];
+  const failedPages = [];
 
   for (let page = 1; page <= OPTS.pages; page++) {
     process.stdout.write(`anime page ${page}/${OPTS.pages} ... `);
-    const json = await jikan(`https://api.jikan.moe/v4/top/anime?page=${page}`);
+    let json;
+    try {
+      json = await jikan(`https://api.jikan.moe/v4/top/anime?page=${page}`);
+    } catch (e) {
+      // One page that will not load must not throw away the pages that did.
+      // Everything already inserted is committed; re-running picks up the rest.
+      console.log(`FAILED (${e.message})`);
+      failedPages.push(page);
+      continue;
+    }
     if (!json?.data?.length) {
       console.log("no data, stopping");
       break;
@@ -191,7 +219,22 @@ async function main() {
     await sleep(THROTTLE_MS);
   }
 
-  console.log(`\nCatalogue: ${seeded.length} anime upserted.\n`);
+  if (!seeded.length) {
+    console.error(
+      "\nNo anime were seeded — every request to Jikan failed.\n" +
+        "This is almost always the API being down or rate limiting, not your setup.\n" +
+        "Check https://api.jikan.moe/v4/anime/1 in a browser, then run db:seed again.\n" +
+        "Already-inserted rows are kept, so re-running resumes rather than restarting."
+    );
+    await db.end();
+    process.exit(1);
+  }
+
+  console.log(`\nCatalogue: ${seeded.length} anime upserted.`);
+  if (failedPages.length) {
+    console.log(`  ${failedPages.length} page(s) failed: ${failedPages.join(", ")} — re-run to fill them in.`);
+  }
+  console.log("");
 
   // ------------------------------------------------------------- episodes
   if (OPTS.episodes === "none") {
