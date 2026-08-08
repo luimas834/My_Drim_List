@@ -28,6 +28,18 @@ export default function Profile() {
   // Recommendations state (own profile only)
   const recsFetch = useFetch(() => (isMe ? Api.recommendations() : Promise.resolve(null)), [isMe]);
 
+  // Follower / following lists, fetched only when a count is clicked
+  const [socialTab, setSocialTab] = useState(null); // "followers" | "following" | null
+  const socialFetch = useFetch(
+    () =>
+      socialTab === "followers"
+        ? Api.followers(userId)
+        : socialTab === "following"
+        ? Api.following(userId)
+        : Promise.resolve(null),
+    [socialTab, userId]
+  );
+
   // Keyset Pagination History state (own profile only)
   const [historyItems, setHistoryItems] = useState([]);
   const [historyAfter, setHistoryAfter] = useState(0);
@@ -122,15 +134,27 @@ export default function Profile() {
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
+            {/* The counts were dead numbers. Both directions come from the same
+                self-referential followers table, read from opposite ends. */}
             <div className="flex gap-4 text-center">
-              <div>
+              <button
+                onClick={() => setSocialTab(socialTab === "followers" ? null : "followers")}
+                className={`px-2 py-1 rounded transition-colors ${
+                  socialTab === "followers" ? "bg-accent/15" : "hover:bg-line/40"
+                }`}
+              >
                 <span className="text-lg font-bold text-accent block">{profile.followers_count ?? 0}</span>
                 <span className="text-xs text-muted uppercase font-semibold">Followers</span>
-              </div>
-              <div>
+              </button>
+              <button
+                onClick={() => setSocialTab(socialTab === "following" ? null : "following")}
+                className={`px-2 py-1 rounded transition-colors ${
+                  socialTab === "following" ? "bg-accent/15" : "hover:bg-line/40"
+                }`}
+              >
                 <span className="text-lg font-bold text-accent block">{profile.following_count ?? 0}</span>
                 <span className="text-xs text-muted uppercase font-semibold">Following</span>
-              </div>
+              </button>
             </div>
 
             {currentUser && !isMe && (
@@ -144,6 +168,47 @@ export default function Profile() {
         </div>
 
         {followErr && <Banner type="err" message={followErr} />}
+
+        {socialTab && (
+          <div className="pt-3 border-t border-line space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-sm font-bold text-text capitalize">{socialTab}</h3>
+              <Concept>
+                {socialTab === "followers"
+                  ? "followers JOIN users ON follower_id — the same table read from the other end"
+                  : "followers JOIN users ON following_id — self-referential M:N, both directions"}
+              </Concept>
+            </div>
+
+            {socialFetch.loading ? (
+              <Loading text={`Loading ${socialTab}...`} />
+            ) : socialFetch.data && socialFetch.data.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {socialFetch.data.map((u) => (
+                  <Link
+                    key={u.user_id}
+                    to={`/profile/${u.user_id}`}
+                    className="flex items-center gap-3 p-2 rounded border border-line/60 bg-bg/50 hover:border-accent/60 transition-colors"
+                  >
+                    <div className="w-8 h-8 shrink-0 bg-accent/20 border border-accent text-accent rounded-full flex items-center justify-center font-bold text-xs uppercase">
+                      {u.username?.substring(0, 2)}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-text block truncate">{u.username}</span>
+                      <span className="text-xs text-muted">
+                        since {u.followed_at?.substring(0, 10)}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted italic">
+                {socialTab === "followers" ? "No followers yet." : "Not following anyone yet."}
+              </p>
+            )}
+          </div>
+        )}
 
         {isMe && (
           <div className="pt-3 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-2">

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Api, useFetch, fmtScore, errMsg, num } from "../api";
+import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
 import { Card, Tag, Btn, Banner, Concept, Loading } from "../ui";
 
@@ -12,6 +12,11 @@ export default function AnimeDetail() {
   const animeFetch = useFetch(() => Api.anime(animeId), [animeId]);
   const watchlistFetch = useFetch(() => (user ? Api.watchlist() : Promise.resolve([])), [user]);
   const reviewsFetch = useFetch(() => Api.reviews(animeId), [animeId]);
+  const votesFetch = useFetch(
+    () => (user ? Api.myVotes(animeId) : Promise.resolve([])),
+    [user, animeId]
+  );
+  const myVotes = React.useMemo(() => votesFetch.data || [], [votesFetch.data]);
 
   // Expanded episode state
   const [expandedEpisodeId, setExpandedEpisodeId] = useState(null);
@@ -119,8 +124,11 @@ export default function AnimeDetail() {
     }
   };
 
-  // Review submission handler
-  const handlePostReview = async (force = false) => {
+  // Review submission handler.
+  // The "Try anyway" button passes true purely to make the call site read as a
+  // deliberate guard demo — the request is identical either way, because the
+  // point is that trg_review_guard, not the client, decides.
+  const handlePostReview = async (_demoGuardBypass = false) => {
     setReviewErr(null);
     setReviewMsg(null);
     setReviewSubmitting(true);
@@ -142,11 +150,20 @@ export default function AnimeDetail() {
   };
 
   // Helpful vote handler
+  // Toggle: cast_helpful_vote inserts, DELETE removes and trg_helpful_count
+  // decrements. Knowing which reviews I have already voted on comes from the
+  // server (my-votes) rather than being assumed, so a refresh doesn't reset it.
   const handleHelpful = async (reviewId) => {
     setHelpfulErr(null);
+    const alreadyVoted = myVotes.includes(reviewId);
     try {
-      await Api.helpful(reviewId);
+      if (alreadyVoted) {
+        await Api.unhelpful(reviewId);
+      } else {
+        await Api.helpful(reviewId);
+      }
       reviewsFetch.reload();
+      votesFetch.reload();
     } catch (err) {
       setHelpfulErr(errMsg(err));
     }
@@ -472,10 +489,20 @@ export default function AnimeDetail() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-line text-xs">
                     <div className="flex items-center gap-3">
-                      <Btn variant="ghost" className="py-1 px-2.5 text-xs" onClick={() => handleHelpful(r.review_id)}>
-                        👍 Helpful ({r.helpful_count})
+                      <Btn
+                        variant={myVotes.includes(r.review_id) ? "primary" : "ghost"}
+                        className="py-1 px-2.5 text-xs"
+                        disabled={!user}
+                        title={user ? "" : "Log in to vote"}
+                        onClick={() => handleHelpful(r.review_id)}
+                      >
+                        👍 {myVotes.includes(r.review_id) ? "Helpful ✓" : "Helpful"} ({r.helpful_count})
                       </Btn>
-                      <Concept>Stored procedure cast_helpful_vote</Concept>
+                      <Concept>
+                        {myVotes.includes(r.review_id)
+                          ? "DELETE review_votes → trg_helpful_count decrements"
+                          : "CALL cast_helpful_vote → trg_helpful_count increments"}
+                      </Concept>
                     </div>
 
                     {isMine && !isEditing && (
