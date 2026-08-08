@@ -51,8 +51,14 @@ router.get("/", async (req, res) => {
 
     params.push(limit);
     params.push(offset);
+    // COUNT(*) OVER() is a window function evaluated over the full filtered set
+    // *before* LIMIT/OFFSET are applied, so every returned row carries the total
+    // number of matches. That gives the client a real page count without a
+    // second round trip and without the two queries disagreeing under concurrent
+    // writes. The cost is the same scan the filter already needed.
     const { rows } = await db.query(
-      `SELECT acv.* FROM anime_card_view acv
+      `SELECT acv.*, COUNT(*) OVER() AS total_count
+       FROM anime_card_view acv
        ${whereSql}
        ORDER BY acv.score DESC NULLS LAST, acv.anime_id
        LIMIT $${params.length - 1} OFFSET $${params.length}`,

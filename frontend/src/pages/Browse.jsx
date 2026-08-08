@@ -72,6 +72,16 @@ export default function Browse() {
     setSearchParams({});
   };
 
+  const goToPage = (newPage) => {
+    setPage(newPage);
+    updateFilters(q, genre, studio, newPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // total_count rides along on every row via COUNT(*) OVER() — no second query
+  const total = Number(catalogFetch.data?.[0]?.total_count ?? 0);
+  const totalPages = total ? Math.ceil(total / 20) : 1;
+
   return (
     <div className="space-y-6 py-6">
       <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-2">
@@ -150,27 +160,21 @@ export default function Browse() {
 
           {/* Pagination Controls */}
           <div className="flex items-center justify-between pt-4 border-t border-line">
-            <Btn
-              variant="ghost"
-              disabled={page <= 1}
-              onClick={() => {
-                const nextP = page - 1;
-                setPage(nextP);
-                updateFilters(q, genre, nextP);
-              }}
-            >
+            <Btn variant="ghost" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
               ← Previous
             </Btn>
-            <span className="text-sm text-muted">Page {page}</span>
-            <Btn
-              variant="ghost"
-              disabled={!catalogFetch.data || catalogFetch.data.length < 20}
-              onClick={() => {
-                const nextP = page + 1;
-                setPage(nextP);
-                updateFilters(q, genre, nextP);
-              }}
-            >
+            <div className="text-center">
+              <span className="text-sm text-muted">
+                Page {page}
+                {totalPages ? ` of ${totalPages}` : ""}
+              </span>
+              {total > 0 && (
+                <span className="block text-xs text-muted">
+                  {total} anime match{total === 1 ? "es" : ""}
+                </span>
+              )}
+            </div>
+            <Btn variant="ghost" disabled={page >= totalPages} onClick={() => goToPage(page + 1)}>
               Next →
             </Btn>
           </div>
