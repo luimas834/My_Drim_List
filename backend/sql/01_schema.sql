@@ -25,6 +25,8 @@ CREATE TABLE anime (
     episode_count INT,
     status        VARCHAR(30),
     score         NUMERIC(4,2),               -- aggregate, maintained ONLY by trigger
+    mal_score     NUMERIC(4,2),               -- the score Jikan gave us; the fallback
+                                              -- when this anime has no reviews yet
     aired_from    DATE,
     aired_to      DATE,
     created_at    TIMESTAMP DEFAULT NOW()
