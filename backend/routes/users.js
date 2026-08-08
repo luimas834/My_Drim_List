@@ -80,7 +80,15 @@ router.get("/:id/stats", async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
-    const { rows } = await db.query("SELECT * FROM get_user_stats($1)", [userId]);
+    // get_user_stats aggregates over watchlist, and COUNT(*) over no rows is 0,
+    // not "no rows" — so the function returns a row of zeros for a user id that
+    // does not exist and the 404 below could never fire. Gating on EXISTS makes
+    // the result set genuinely empty for an unknown user, still in one query.
+    const { rows } = await db.query(
+      `SELECT s.* FROM get_user_stats($1) s
+       WHERE EXISTS (SELECT 1 FROM users WHERE user_id = $1)`,
+      [userId]
+    );
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
     res.json(rows[0]);
   } catch (e) {

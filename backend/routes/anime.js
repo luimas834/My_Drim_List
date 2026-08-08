@@ -17,22 +17,54 @@ router.get("/", async (req, res) => {
     const where = [];
     if (req.query.q) {
       params.push(`%${req.query.q}%`);
-      where.push(`title ILIKE $${params.length}`);
+      where.push(`acv.title ILIKE $${params.length}`);
     }
     if (req.query.genre) {
-      params.push(`%${req.query.genre}%`);
-      where.push(`genres ILIKE $${params.length}`);
+      // Was: genres ILIKE '%Action%' against the view's STRING_AGG output. That
+      // reads a comma-joined string, so it could never use idx_anime_genres_g,
+      // and it substring-matched — filtering on "Drama" also returned anything
+      // tagged "Psychological Drama". Testing membership against the bridge
+      // table instead is both exact and indexed.
+      params.push(req.query.genre);
+      where.push(`EXISTS (
+        SELECT 1
+        FROM anime_genres ag
+        JOIN genres g ON g.genre_id = ag.genre_id
+        WHERE ag.anime_id = acv.anime_id
+          AND g.name = $${params.length}
+      )`);
     }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     params.push(limit);
     params.push(offset);
     const { rows } = await db.query(
-      `SELECT * FROM anime_card_view
+      `SELECT acv.* FROM anime_card_view acv
        ${whereSql}
-       ORDER BY score DESC NULLS LAST
+       ORDER BY acv.score DESC NULLS LAST, acv.anime_id
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/anime/genres  -> the genre list, for filter dropdowns.
+// Previously the client derived this from the top_by_genre matview, which only
+// contains genres that have at least one scored anime — so a genre with no
+// reviews yet was unfilterable.
+router.get("/genres", async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT g.genre_id, g.name, COUNT(ag.anime_id)::INT AS anime_count
+       FROM genres g
+       LEFT JOIN anime_genres ag ON ag.genre_id = g.genre_id
+       GROUP BY g.genre_id
+       HAVING COUNT(ag.anime_id) > 0
+       ORDER BY g.name`
     );
     res.json(rows);
   } catch (e) {
