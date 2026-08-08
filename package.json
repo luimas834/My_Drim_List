@@ -13,6 +13,7 @@
     "db:setup": "npm --prefix backend run db:setup",
     "db:reset": "npm --prefix backend run db:reset",
     "db:seed": "npm --prefix backend run db:seed",
+    "db:seed:anilist": "npm --prefix backend run db:seed:anilist --",
     "db:dump": "npm --prefix backend run db:dump",
     "db:restore": "npm --prefix backend run db:restore",
     "db:verify": "npm --prefix backend run db:verify",

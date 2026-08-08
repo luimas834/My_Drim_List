@@ -17,6 +17,7 @@ const EXPECTED = {
   ],
   functions: [
     "get_user_stats", "recommend_anime", "get_watch_history", "get_recent_discussions",
+    "get_anime_discussion_stats",
   ],
   procedures: ["cast_helpful_vote", "bulk_drop_inactive"],
   views: ["anime_card_view", "episode_card_view"],
