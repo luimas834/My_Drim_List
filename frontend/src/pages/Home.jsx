@@ -6,6 +6,7 @@ import { AnimeCard, Loading, Banner, Concept, Btn } from "../ui";
 export default function Home() {
   const trendingFetch = useFetch(() => Api.trending());
   const topFetch = useFetch(() => Api.top());
+  const discussionsFetch = useFetch(() => Api.recentDiscussions(8));
   const [visibleGenreCount, setVisibleGenreCount] = useState(5);
 
   const loading = trendingFetch.loading || topFetch.loading;
@@ -85,6 +86,46 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {/* Latest episode discussions — one function call, already joined */}
+      {discussionsFetch.data && discussionsFetch.data.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-accent">Latest Episode Discussions</h2>
+            <Concept>get_recent_discussions() — comment ⋈ user ⋈ episode ⋈ anime in one call</Concept>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {discussionsFetch.data.map((d) => (
+              <Link
+                key={d.discussion_id}
+                to={`/anime/${d.anime_id}`}
+                className="card flex gap-3 p-3 hover:border-accent/60 transition-colors"
+              >
+                {d.cover_image && (
+                  <img
+                    src={d.cover_image}
+                    alt={d.anime_title}
+                    className="w-12 h-16 object-cover rounded shrink-0"
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                  />
+                )}
+                <div className="min-w-0 space-y-1">
+                  <p className="text-xs text-muted truncate">
+                    <span className="text-accent font-semibold">{d.username}</span> on{" "}
+                    <span className="text-text font-medium">{d.anime_title}</span> · Ep{" "}
+                    {d.episode_number}
+                  </p>
+                  <p className="text-sm text-text/90 line-clamp-2">{d.comment}</p>
+                  <p className="text-[0.65rem] text-muted">
+                    {d.is_edited && <span className="italic">edited · </span>}
+                    {d.created_at?.substring(0, 10)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
