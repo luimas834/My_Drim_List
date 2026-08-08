@@ -1,11 +1,17 @@
 -- ========== 1. SCORE UPDATE: keep anime.score = avg of review scores ==========
+-- AVG() over zero rows is NULL, so deleting the last review used to blank the
+-- score entirely — including the rating we seeded from MyAnimeList. COALESCE
+-- falls back to anime.mal_score, so an unreviewed title still shows a number
+-- and the column only reflects our users once our users have said something.
 CREATE OR REPLACE FUNCTION fn_update_anime_score() RETURNS TRIGGER AS $$
 DECLARE v_anime INT;
 BEGIN
     v_anime := COALESCE(NEW.anime_id, OLD.anime_id);   -- works for INSERT/UPDATE/DELETE
     UPDATE anime
-    SET score = (SELECT ROUND(AVG(score)::numeric, 2)
-                 FROM reviews WHERE anime_id = v_anime AND score IS NOT NULL)
+    SET score = COALESCE(
+            (SELECT ROUND(AVG(score)::numeric, 2)
+             FROM reviews WHERE anime_id = v_anime AND score IS NOT NULL),
+            mal_score)                                  -- unqualified = the row being updated
     WHERE anime_id = v_anime;
     RETURN NULL;                                        -- AFTER trigger: return ignored
 END; $$ LANGUAGE plpgsql;
