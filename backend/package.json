@@ -5,7 +5,14 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "seed": "node sql/seed.js"
+    "seed": "node sql/seed.js",
+    "db:setup": "node sql/setup.js",
+    "db:reset": "node sql/setup.js",
+    "db:seed": "node sql/seed.js",
+    "db:dump": "node sql/dump.js",
+    "db:restore": "node sql/restore.js",
+    "db:verify": "node sql/verify.js",
+    "db:make-admin": "node sql/make-admin.js"
   },
   "license": "MIT",
   "dependencies": {
