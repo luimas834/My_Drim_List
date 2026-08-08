@@ -23,7 +23,7 @@ router.post("/register", async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO users (username, email, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING user_id, username, email, profile_pic, bio, created_at`,
+       RETURNING user_id, username, email, profile_pic, bio, is_admin, created_at`,
       [username, email, hash]
     );
     const user = rows[0];
@@ -43,7 +43,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "email and password are required" });
     }
     const { rows } = await db.query(
-      `SELECT user_id, username, email, password_hash, profile_pic, bio, created_at
+      `SELECT user_id, username, email, password_hash, profile_pic, bio, is_admin, created_at
        FROM users WHERE email = $1`,
       [email]
     );
@@ -65,7 +65,7 @@ router.post("/login", async (req, res) => {
 router.get("/me", auth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT user_id, username, email, profile_pic, bio, created_at
+      `SELECT user_id, username, email, profile_pic, bio, is_admin, created_at
        FROM users WHERE user_id = $1`,
       [req.userId]
     );

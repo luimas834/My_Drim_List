@@ -1,12 +1,21 @@
-// routes/admin.js — maintenance endpoints. Kept unauthenticated for the demo per
-// the Phase 4 contract; in production this would sit behind an admin guard.
+// routes/admin.js — maintenance endpoints.
+//
+// These reach straight into the database: one rebuilds a materialized view, the
+// other mass-updates watchlist rows. Both are now behind requireAdmin — a
+// verified JWT whose user has is_admin set. Previously they were open to anyone
+// who could reach the port, which was fine for a local demo and indefensible
+// anywhere else.
+//
+// Grant yourself access after registering:
+//   npm run db:make-admin -- your@email.com
 const express = require("express");
 const db = require("../db");
+const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
 // POST /api/admin/refresh -> recompute the top_by_genre materialized view
-router.post("/refresh", async (req, res) => {
+router.post("/refresh", requireAdmin, async (req, res) => {
   try {
     await db.query("REFRESH MATERIALIZED VIEW top_by_genre");
     res.json({ status: "ok", refreshed: "top_by_genre" });
@@ -17,7 +26,7 @@ router.post("/refresh", async (req, res) => {
 });
 
 // POST /api/admin/bulk-drop -> CALL bulk_drop_inactive(months)
-router.post("/bulk-drop", async (req, res) => {
+router.post("/bulk-drop", requireAdmin, async (req, res) => {
   try {
     const months = req.body.months !== undefined ? parseInt(req.body.months, 10) : 6;
     const client = await db.pool.connect();

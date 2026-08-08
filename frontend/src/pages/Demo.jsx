@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Api, errMsg } from "../api";
+import { useAuth } from "../auth";
 import { Card, Btn, Banner, Concept } from "../ui";
 
 export default function Demo() {
+  const { user } = useAuth();
   const [healthData, setHealthData] = useState(null);
   const [healthErr, setHealthErr] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -85,6 +87,30 @@ export default function Demo() {
         <h1 className="text-3xl font-extrabold text-accent">Demo & Viva Control Panel</h1>
         <p className="text-sm text-muted">Cheat sheet and maintenance administrative tools for presentation demo</p>
       </div>
+
+      {/* The maintenance routes are behind requireAdmin, so say so before the
+          user clicks a button and gets a 403 they have to interpret. */}
+      {!user?.is_admin && (
+        <Card className="border-amber-800/80 bg-amber-950/30 space-y-2">
+          <p className="text-sm font-semibold text-amber-200">
+            Maintenance tools require an admin account
+          </p>
+          <p className="text-xs text-amber-200/80">
+            {user
+              ? `You are logged in as ${user.username}, who is not an admin.`
+              : "You are not logged in."}{" "}
+            The buttons below call <code>POST /api/admin/*</code>, which is protected by the
+            requireAdmin middleware. Grant yourself access from the repo root:
+          </p>
+          <pre className="bg-bg p-2 rounded text-xs font-mono text-accent border border-line overflow-x-auto">
+            npm run db:make-admin -- {user?.email || "your@email.com"}
+          </pre>
+          <Concept>
+            Admin is read from the database on every request, not from the JWT — a revoked role
+            takes effect immediately instead of when the 7-day token expires.
+          </Concept>
+        </Card>
+      )}
 
       {/* Admin Maintenance Tools */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

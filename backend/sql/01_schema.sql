@@ -13,6 +13,8 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     profile_pic   TEXT,
     bio           TEXT,
+    is_admin      BOOLEAN DEFAULT FALSE,      -- gates the maintenance routes;
+                                              -- grant with: npm run db:make-admin -- <email>
     created_at    TIMESTAMP DEFAULT NOW()
 );
 
