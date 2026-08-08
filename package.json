@@ -17,6 +17,7 @@
     "db:dump": "npm --prefix backend run db:dump",
     "db:restore": "npm --prefix backend run db:restore",
     "db:verify": "npm --prefix backend run db:verify",
+    "db:sql": "npm --prefix backend run db:sql --",
     "db:make-admin": "npm --prefix backend run db:make-admin --"
   },
   "devDependencies": {

@@ -13,7 +13,8 @@
     "db:restore": "node sql/restore.js",
     "db:verify": "node sql/verify.js",
     "db:make-admin": "node sql/make-admin.js",
-    "db:seed:anilist": "node sql/seed-anilist.js"
+    "db:seed:anilist": "node sql/seed-anilist.js",
+    "db:sql": "node sql/query.js"
   },
   "license": "MIT",
   "dependencies": {
