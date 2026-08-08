@@ -64,6 +64,41 @@ router.get("/notifications", auth, async (req, res) => {
   }
 });
 
+//GET /api/notifications/unread-count — for the navbar badge.
+//COUNT with a WHERE beats fetching every notification and filtering in the
+//client, which is what the navbar would otherwise have to do on every page.
+router.get("/notifications/unread-count", auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::INT AS unread
+       FROM notifications
+       WHERE user_id = $1 AND is_read = FALSE`,
+      [req.userId]
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+//PATCH /api/notifications/read-all — mark every unread notification of mine read.
+//One statement for the whole set; the WHERE clause is the authorisation.
+router.patch("/notifications/read-all", auth, async (req, res) => {
+  try {
+    const { rowCount } = await db.query(
+      `UPDATE notifications
+       SET is_read = TRUE
+       WHERE user_id = $1 AND is_read = FALSE`,
+      [req.userId]
+    );
+    res.json({ marked_read: rowCount });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 //PATCH /api/notifications/:id/read — mark one of my notifications as read
 router.patch("/notifications/:id/read", auth, async (req, res) => {
   try {

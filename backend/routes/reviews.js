@@ -130,4 +130,50 @@ router.post("/:reviewId/helpful", auth, async (req, res) => {
   }
 });
 
+//DELETE /api/reviews/:reviewId/helpful — take back a helpful vote.
+//trg_helpful_count already handles AFTER DELETE on review_votes and decrements
+//with GREATEST(helpful_count - 1, 0); there was simply no route reaching it, so
+//a vote could be cast but never withdrawn.
+router.delete("/:reviewId/helpful", auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `DELETE FROM review_votes
+       WHERE review_id = $1 AND user_id = $2
+       RETURNING review_id`,
+      [req.params.reviewId, req.userId]
+    );
+
+    if (!rows[0]) return res.status(404).json({ error: "You have not voted on this review" });
+
+    //read the count back after the trigger has decremented it
+    const { rows: after } = await db.query(
+      "SELECT review_id, helpful_count FROM reviews WHERE review_id = $1",
+      [req.params.reviewId]
+    );
+    res.json(after[0]);
+  } catch (e) {
+    if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+//GET /api/reviews/anime/:animeId/my-votes — which of these reviews I have voted on,
+//so the UI can render the button in the right state instead of guessing
+router.get("/anime/:animeId/my-votes", auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT v.review_id
+       FROM review_votes v
+       JOIN reviews r ON r.review_id = v.review_id
+       WHERE r.anime_id = $1 AND v.user_id = $2`,
+      [req.params.animeId, req.userId]
+    );
+    res.json(rows.map((r) => r.review_id));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;

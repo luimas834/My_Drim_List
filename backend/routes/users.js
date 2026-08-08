@@ -98,6 +98,49 @@ router.get("/:id/stats", async (req, res) => {
   }
 });
 
+// GET /api/users/:id/followers - who follows this user
+// followers is a self-referential M:N, so both directions are the same table
+// read from opposite ends: followers joins on follower_id, following on
+// following_id. That symmetry is the whole point of the design.
+router.get("/:id/followers", async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
+    const { rows } = await db.query(
+      `SELECT u.user_id, u.username, u.profile_pic, u.bio, f.followed_at
+       FROM followers f
+       JOIN users u ON u.user_id = f.follower_id
+       WHERE f.following_id = $1
+       ORDER BY f.followed_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/users/:id/following - who this user follows
+router.get("/:id/following", async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
+    const { rows } = await db.query(
+      `SELECT u.user_id, u.username, u.profile_pic, u.bio, f.followed_at
+       FROM followers f
+       JOIN users u ON u.user_id = f.following_id
+       WHERE f.follower_id = $1
+       ORDER BY f.followed_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET /api/users/:id/follow-status - auth required
 router.get("/:id/follow-status", auth, async (req, res) => {
   try {
