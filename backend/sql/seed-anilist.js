@@ -34,7 +34,7 @@ function flag(name, fallback) {
 }
 
 const OPTS = {
-  pages: parseInt(flag("pages", "3"), 10), // 50 per page
+  pages: parseInt(flag("pages", "10"), 10), // 50 per page -> ~500 anime
   perPage: parseInt(flag("per-page", "50"), 10),
   episodes: flag("episodes", "all"),
   maxEpisodes: parseInt(flag("max-episodes", "400"), 10),

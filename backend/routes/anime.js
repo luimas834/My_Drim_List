@@ -19,6 +19,19 @@ router.get("/", async (req, res) => {
       params.push(`%${req.query.q}%`);
       where.push(`acv.title ILIKE $${params.length}`);
     }
+    if (req.query.studio) {
+      // Same EXISTS-against-the-bridge pattern as the genre filter, using
+      // idx_anime_studios_s. anime_card_view exposes studios as a STRING_AGG,
+      // which is fine to display and useless to filter on.
+      params.push(req.query.studio);
+      where.push(`EXISTS (
+        SELECT 1
+        FROM anime_studios ast
+        JOIN studios st ON st.studio_id = ast.studio_id
+        WHERE ast.anime_id = acv.anime_id
+          AND st.name = $${params.length}
+      )`);
+    }
     if (req.query.genre) {
       // Was: genres ILIKE '%Action%' against the view's STRING_AGG output. That
       // reads a comma-joined string, so it could never use idx_anime_genres_g,
@@ -67,6 +80,54 @@ router.get("/genres", async (req, res) => {
        ORDER BY g.name`
     );
     res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/anime/studios  -> studio list with aggregates, for filters and browsing
+router.get("/studios", async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT studio_id, name, anime_count, avg_score, best_score, total_episodes
+       FROM studio_card_view
+       WHERE anime_count > 0
+       ORDER BY anime_count DESC, name`
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/anime/studios/top?limit=&min= -> ranked leaderboard
+router.get("/studios/top", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    const min = parseInt(req.query.min, 10) || 2;
+    const { rows } = await db.query("SELECT * FROM get_top_studios($1, $2)", [limit, min]);
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/anime/studios/:studioId -> one studio's full catalogue
+router.get("/studios/:studioId", async (req, res) => {
+  try {
+    const studioId = parseInt(req.params.studioId, 10);
+    if (Number.isNaN(studioId)) return res.status(400).json({ error: "Invalid studio id" });
+
+    const [studioQ, animeQ] = await Promise.all([
+      db.query("SELECT * FROM studio_card_view WHERE studio_id = $1", [studioId]),
+      db.query("SELECT * FROM get_studio_anime($1)", [studioId]),
+    ]);
+
+    if (!studioQ.rows[0]) return res.status(404).json({ error: "Studio not found" });
+    res.json({ ...studioQ.rows[0], anime: animeQ.rows });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });

@@ -250,7 +250,18 @@ export default function AnimeDetail() {
           {/* Studios */}
           {anime.studios && anime.studios.length > 0 && (
             <div className="text-xs text-muted">
-              Studios: <span className="text-text font-medium">{anime.studios.map((s) => s.name).join(", ")}</span>
+              Studios:{" "}
+              {anime.studios.map((s, i) => (
+                <React.Fragment key={s.studio_id}>
+                  {i > 0 && ", "}
+                  <Link
+                    to={`/browse?studio=${encodeURIComponent(s.name)}`}
+                    className="text-text font-medium hover:text-accent underline decoration-dotted"
+                  >
+                    {s.name}
+                  </Link>
+                </React.Fragment>
+              ))}
             </div>
           )}
 

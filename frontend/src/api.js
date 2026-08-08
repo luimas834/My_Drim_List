@@ -100,6 +100,10 @@ export const Api = {
   followers: (id) => api.get(`/users/${id}/followers`).then((r) => r.data),
   following: (id) => api.get(`/users/${id}/following`).then((r) => r.data),
   genres: () => api.get("/anime/genres").then((r) => r.data),
+  studios: () => api.get("/anime/studios").then((r) => r.data),
+  topStudios: (limit = 10, min = 2) =>
+    api.get("/anime/studios/top", { params: { limit, min } }).then((r) => r.data),
+  studio: (studioId) => api.get(`/anime/studios/${studioId}`).then((r) => r.data),
   recommendations: () => api.get("/users/me/recommendations").then((r) => r.data),
   history: (after, limit) => api.get("/users/me/history", { params: { after, limit } }).then((r) => r.data),
   activity: (limit) => api.get("/users/me/activity", { params: { limit } }).then((r) => r.data),
