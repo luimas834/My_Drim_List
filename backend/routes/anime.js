@@ -95,7 +95,7 @@ router.get("/:id", async (req, res) => {
     const animeQ = await db.query(`SELECT * FROM anime WHERE anime_id = $1`, [id]);
     if (!animeQ.rows[0]) return res.status(404).json({ error: "Anime not found" });
 
-    const [genresQ, studiosQ, episodesQ] = await Promise.all([
+    const [genresQ, studiosQ, episodesQ, discussionQ] = await Promise.all([
       db.query(
         `SELECT g.genre_id, g.name FROM genres g
          JOIN anime_genres ag ON ag.genre_id = g.genre_id
@@ -108,11 +108,16 @@ router.get("/:id", async (req, res) => {
          WHERE ast.anime_id = $1 ORDER BY s.name`,
         [id]
       ),
+      // episode_card_view carries comment_count and last_comment_at, so the
+      // whole season's discussion activity arrives with the episode list
+      // instead of one extra request per episode
       db.query(
-        `SELECT episode_id, episode_number, title, aired_on
-         FROM episodes WHERE anime_id = $1 ORDER BY episode_number`,
+        `SELECT episode_id, episode_number, title, aired_on,
+                comment_count, last_comment_at
+         FROM episode_card_view WHERE anime_id = $1 ORDER BY episode_number`,
         [id]
       ),
+      db.query(`SELECT * FROM get_anime_discussion_stats($1)`, [id]),
     ]);
 
     res.json({
@@ -120,6 +125,11 @@ router.get("/:id", async (req, res) => {
       genres: genresQ.rows,
       studios: studiosQ.rows,
       episodes: episodesQ.rows,
+      discussion_stats: discussionQ.rows[0] || {
+        total_comments: 0,
+        episodes_with_comments: 0,
+        participants: 0,
+      },
     });
   } catch (e) {
     console.error(e);
