@@ -4,185 +4,234 @@
 
 ---
 
-## 💡 Architectural Philosophy: "Thin Backend, Fat Database"
+## ⚡ Quick start
+
+```bash
+createdb mdl
+cp backend/.env.example backend/.env     # then edit DATABASE_URL and JWT_SECRET
+npm run setup                            # installs deps, builds the schema, loads the catalogue
+npm run dev                              # backend :4000 + frontend :5173
+```
+
+Then register an account in the browser and give it admin rights so the maintenance tools work:
+
+```bash
+npm run db:make-admin -- your@email.com
+npm run db:verify                        # confirms every DB object exists and you have demo data
+```
+
+That's the whole setup. See [Database setup](#-database-setup) for what each step does and how to
+reseed from the live API.
+
+---
+
+## 💡 Architectural philosophy: "thin backend, fat database"
 
 Unlike conventional web applications that rely on Object-Relational Mappers (ORMs) and heavy backend service layers, MDL follows a strict **database-first** design:
 
-* **PostgreSQL (Fat Layer):** Handles all business logic using raw SQL, PL/pgSQL functions, procedures, triggers, cursors, and materialized views.
-* **Express Backend (Thin Messenger):** Pure API translation layer. It authenticates requests, executes parameterized SQL queries (`$1, $2`), and returns JSON. **No ORM (Prisma/Sequelize) is used.**
-* **React Frontend:** Handles UI rendering and state display.
+* **PostgreSQL (fat layer):** all business logic — raw SQL, PL/pgSQL functions, procedures, triggers, cursors, views.
+* **Express backend (thin messenger):** authenticate the caller, run one parameterized SQL call (`$1, $2`), translate database errors into HTTP status codes, return JSON. **No ORM.**
+* **React frontend:** renders. No client-side business logic, no caching layer.
+
+The clearest example: `POST /api/reviews` never checks whether you finished the anime. It runs the
+INSERT and catches the error. The rule lives in a trigger, so it holds for every client — including
+someone connected with `psql`.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Tech stack
 
 | Layer | Technology |
 |---|---|
-| **Database** | PostgreSQL 14+ (Raw SQL, PL/pgSQL, Triggers, Views) |
-| **Database Driver** | `pg` (node-postgres) |
-| **Backend** | Node.js + Express.js |
-| **Authentication** | JSON Web Tokens (`jsonwebtoken`) + Password Hashing (`bcryptjs`) |
-| **Frontend** | React + Vite + React Router + Axios |
-| **Data Source** | Jikan API (`https://api.jikan.moe/v4`) |
+| **Database** | PostgreSQL 14+ (raw SQL, PL/pgSQL, triggers, views) |
+| **Driver** | `pg` (node-postgres) |
+| **Backend** | Node.js 18+ · Express |
+| **Auth** | `jsonwebtoken` + `bcryptjs` |
+| **Frontend** | React · Vite · React Router · Axios · Tailwind v4 |
+| **Data source** | Jikan API (`https://api.jikan.moe/v4`) |
 
 ---
 
-## ✨ Features & Functionality
+## 🗄️ Database setup
 
-### 1. Database Foundation & Schema
-* **14 Core Entities:** `users`, `anime`, `genres`, `anime_genres`, `studios`, `anime_studios`, `episodes`, `watchlist`, `reviews`, `review_votes`, `episode_discussions`, `followers`, `activity_log`, `notifications`.
-* **Automated Data Seeding (`seed.js`):** Node script that pages through the Jikan API to populate real anime, genres, studios, and episode records.
-* **Real-time Views & Ranking:**
-  * `anime_card_view`: Regular view flattening anime details with concatenated genres and studios (`STRING_AGG`).
-  * `top_by_genre`: Materialized view pre-ranking top anime per genre using window functions (`RANK() OVER (PARTITION BY ...)`).
+Every command runs from the repo root.
 
-### 2. User Authentication
-* **Registration & Login:** Password hashing with `bcryptjs` (cost factor 10) and JWT token generation (7-day expiration).
-* **Protected Routes Middleware:** `authMiddleware` validates `Authorization: Bearer <token>` headers and attaches `req.userId`.
-
-### 3. Anime Catalog & Discovery
-* **Catalog Browsing & Search:** Paginated search by title (`ILIKE`) and genre filtering.
-* **Anime Details:** Returns complete anime info along with nested genres, studios, and episodes.
-* **Trending & Leaderboards:** Fetches weekly trending anime based on user activity and queries the `top_by_genre` materialized view.
-* **Admin Refresh:** `POST /api/admin/refresh` triggers `REFRESH MATERIALIZED VIEW top_by_genre`.
-
-### 4. Watchlist Management & Trigger Automation
-* **Watchlist Tracking:** Full CRUD operations for user watchlists (`watching`, `completed`, `on-hold`, `dropped`, `plan-to-watch`).
-* **Dynamic Partial Updates (`PATCH`):** Allows updating any combination of `status`, `episodes_watched`, or `user_score` via dynamic parameterized SQL.
-* **Automated DB Triggers:**
-  * **Episode Check (`fn_episode_check`):** Auto-marks status as `'completed'` when `episodes_watched` reaches `anime.episode_count`.
-  * **Finish Date Stamping (`fn_set_finish_date`):** Automatically sets `finished_at = CURRENT_DATE` upon completion.
-  * **Audit Logging (`fn_log_watchlist`):** Logs all watchlist actions directly into `activity_log`.
-
-### 5. Reviews & Helpful Voting
-* **Review CRUD:** One review per user per anime, enforced by a `UNIQUE (user_id, anime_id)` constraint.
-* **Completion Guard (`fn_review_guard`):** A `BEFORE INSERT` trigger `RAISE EXCEPTION`s unless the user has completed the anime — the API never pre-checks this in JavaScript, it simply converts the database error into HTTP 400.
-* **Live Score Aggregation (`fn_update_anime_score`):** Every insert, update, or delete recomputes `anime.score` as the average of its reviews.
-* **Edit Detection (`fn_flag_review_edited`):** A conditional (`WHEN`) trigger sets `is_edited` and `edited_at` only when the body or score actually changes.
-* **Helpful Votes:** `POST /api/reviews/:id/helpful` calls the `cast_helpful_vote` stored procedure, which handles duplicate and invalid votes with `EXCEPTION` blocks; a companion trigger keeps `helpful_count` in sync.
-
-### 6. Social Graph & Notifications
-* **Follow / Unfollow:** Self-referential M:N relationship on `followers`, guarded at two layers — a declarative `CHECK (follower_id <> following_id)` and the `fn_block_self_follow` trigger.
-* **Trigger-Written Notifications:** No route ever inserts a notification. `fn_notify_new_follower` fires on a new follow, and `fn_notify_new_review` fans a review out to every follower of the reviewer.
-* **Notification Inbox:** Users list their own notifications and mark them read; ownership is enforced in the SQL `WHERE` clause rather than in application code.
-
-### 7. Episode Discussions
-* **Per-Episode Threads:** Public read, authenticated write, ordered oldest-first and joined to usernames in a single query.
-* **Referential Integrity:** A missing episode surfaces as a foreign key violation (`23503`) mapped to HTTP 404, and `ON DELETE CASCADE` clears threads when an anime or episode is removed.
-
----
-
-## ⚡ Database Logic & Trigger Summary
-
-All SQL scripts reside in [backend/sql/](backend/sql):
-
-| File | Purpose |
+| Command | What it does |
 |---|---|
-| [01_schema.sql](backend/sql/01_schema.sql) | DDL tables, PK/FK relationships, cascading deletes, indexes |
-| [02_triggers.sql](backend/sql/02_triggers.sql) | 11 Automated triggers (scoring, guards, episode check, audit logging, notifications) |
-| [03_functions.sql](backend/sql/03_functions.sql) | PL/pgSQL functions (`get_user_stats`, explicit cursor recommendation engine `recommend_anime`, keyset pagination `get_watch_history`) |
-| [04_procedures.sql](backend/sql/04_procedures.sql) | Stored procedures (`cast_helpful_vote`, `bulk_drop_inactive`) |
-| [05_views.sql](backend/sql/05_views.sql) | Views (`anime_card_view`) and Materialized Views (`top_by_genre`) |
-| [seed.js](backend/sql/seed.js) | Jikan API data fetching and PostgreSQL population script |
+| `npm run db:setup` | Applies every numbered `.sql` file in `backend/sql/` in order. **Destructive** — `01_schema.sql` starts with `DROP TABLE ... CASCADE`. |
+| `npm run db:reset` | Same thing. Named for when you mean it. |
+| `npm run db:restore` | Loads the committed catalogue dump. Offline, seconds. **Use this on a new machine.** |
+| `npm run db:seed` | Fetches fresh data from Jikan. Needs internet, takes a few minutes. |
+| `npm run db:dump` | Exports the catalogue to `backend/sql/data/seed_data.sql` so teammates can restore it. Needs `pg_dump`. |
+| `npm run db:verify` | Checks every table, function, procedure, view, matview and trigger exists, plus data counts and demo readiness. |
+| `npm run db:make-admin -- <email>` | Grants a registered user the `is_admin` flag. |
 
----
+**Setting up on a second machine** used to mean five `psql` invocations plus a multi-minute seed.
+Now it's `createdb mdl && npm run setup`. The setup script uses the `pg` driver rather than shelling
+out to `psql`, so a machine only needs Node and a reachable PostgreSQL.
 
-## 📡 API Reference
-
-### Auth Routes (`/api/auth`)
-* `POST /api/auth/register` — Register a new user (`{username, email, password}`)
-* `POST /api/auth/login` — Login user & return JWT token (`{email, password}`)
-* `GET /api/auth/me` — Verify token & fetch current user details *(Protected)*
-
-### Anime Routes (`/api/anime`)
-* `GET /api/anime` — Browse & search anime (`?page=1&q=naruto&genre=Action`)
-* `GET /api/anime/trending` — Fetch top 20 trending anime this week
-* `GET /api/anime/top` — Fetch top-ranked anime by genre (`?genre=Action`)
-* `GET /api/anime/:id` — Get single anime with genres, studios, and episode list
-
-### Admin Routes (`/api/admin`)
-* `POST /api/admin/refresh` — Refresh the `top_by_genre` materialized view
-
-### Watchlist Routes (`/api/watchlist`) *(Protected)*
-* `GET /api/watchlist/me` — Get current user's watchlist joined with `anime_card_view`
-* `POST /api/watchlist` — Add or upsert anime in watchlist (`{anime_id, status}`)
-* `PATCH /api/watchlist/:animeId` — Partial update (`{status?, episodes_watched?, user_score?}`)
-* `DELETE /api/watchlist/:animeId` — Remove anime from watchlist
-
-### Review Routes (`/api/reviews`)
-* `GET /api/reviews/anime/:animeId` — List an anime's reviews with usernames, newest first
-* `POST /api/reviews` — Write a review (`{anime_id, body, score}`) — 400 if the anime is not completed *(Protected)*
-* `PATCH /api/reviews/:reviewId` — Edit your own review (`{body?, score?}`) *(Protected)*
-* `DELETE /api/reviews/:reviewId` — Delete your own review *(Protected)*
-* `POST /api/reviews/:reviewId/helpful` — Mark a review helpful via `cast_helpful_vote` *(Protected)*
-
-### Social Routes (`/api`) *(Protected)*
-* `POST /api/users/:id/follow` — Follow a user — 400 on self-follow, 409 if already following
-* `DELETE /api/users/:id/follow` — Unfollow a user
-* `GET /api/notifications` — List your notifications, newest first
-* `PATCH /api/notifications/:id/read` — Mark one of your notifications as read
-
-### Episode Routes (`/api/episodes`)
-* `GET /api/episodes/:episodeId/discussions` — List an episode's comments with usernames, oldest first
-* `POST /api/episodes/:episodeId/discussions` — Post a comment (`{comment}`) — 404 if the episode does not exist *(Protected)*
-
----
-
-## 🚀 Quick Start & Setup Guide
-
-### 1. Database Setup
-Ensure PostgreSQL is running, then create the database and execute the SQL scripts in order:
+**Reseeding options:**
 
 ```bash
-# Create database
-createdb mdl
-
-# Load database schema and PL/pgSQL objects
-psql mdl -f backend/sql/01_schema.sql
-psql mdl -f backend/sql/02_triggers.sql
-psql mdl -f backend/sql/03_functions.sql
-psql mdl -f backend/sql/04_procedures.sql
-psql mdl -f backend/sql/05_views.sql
-
-# Seed data from Jikan API
-node backend/sql/seed.js
+npm run db:seed                              # 5 pages (~125 anime) + all their episodes
+npm run db:seed -- --pages=3                 # fewer anime
+npm run db:seed -- --episodes=none           # catalogue only, much faster
+npm run db:seed -- --max-episodes=100        # cap episodes per anime for long-running series
+npm run db:seed -- --force-episodes          # re-fetch episodes already stored
 ```
 
-### 2. Environment Configuration
-Create `backend/.env`:
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mdl
-JWT_SECRET=your_super_secret_jwt_key
-PORT=4000
-```
+The seeder is idempotent and resumable: anime upsert on the unique `mal_id`, bridge rows use
+`ON CONFLICT DO NOTHING`, and anime that already have episodes are skipped, so an interrupted run
+picks up where it left off.
 
-### 3. Run Backend & Frontend
-```bash
-# Start Backend (http://localhost:4000)
-cd backend
-npm install
-node index.js
+### A note on images
 
-# Start Frontend (http://localhost:5173)
-cd frontend
-npm install
-npm run dev
-```
+**Cover images are not stored.** `anime.cover_image` holds a URL pointing at MyAnimeList's CDN, and
+the browser fetches it directly. A URL is ~80 bytes; the JPEG is ~100 KB. The database stays small,
+backups stay fast, and image delivery is handled by a CDN built for it rather than by Node.
+
+The trade-off: posters need internet to display. Every piece of *data* still works offline.
 
 ---
 
-## 🗺️ Product Roadmap
+## ✨ Features
 
-- [x] Project Scaffolding & Environment Setup
-- [x] Database Schema, Triggers, Functions, Procedures & Views
-- [x] Data Seeding Pipeline (Jikan API integration)
-- [x] Authentication & JWT Middleware
-- [x] Anime Catalog & Search API
-- [x] Watchlist Management & Automated DB Triggers
-- [x] User Reviews & Review Guarding Triggers
-- [x] Social Features (Follow/Unfollow & Follower Notifications)
-- [x] Episode Discussion Forums
-- [x] Personalized Recommendations Engine & Profile Stats
-- [x] Admin Maintenance Procedures (`REFRESH MATERIALIZED VIEW` & `bulk_drop_inactive`)
-- [x] Complete React User Interface & Presentation Demo Page (`/demo`)
+### 1. Schema and seeding
+* **14 tables** — `users`, `anime`, `genres`, `anime_genres`, `studios`, `anime_studios`, `episodes`, `watchlist`, `reviews`, `review_votes`, `episode_discussions`, `followers`, `activity_log`, `notifications`.
+* Third normal form, with two deliberate derived columns (`anime.score`, `reviews.helpful_count`) kept correct by triggers.
+* **7 indexes** on the foreign keys and filter columns that queries actually use.
+* `anime.mal_score` preserves the seeded rating as a fallback, so removing the last review doesn't blank a title's score.
 
+### 2. Authentication
+* bcrypt hashing (cost 10), JWTs valid 7 days, `authMiddleware` sets `req.userId` from the verified token.
+* **`req.userId` is never read from the request body** — that's what stops one user acting as another.
+* `adminMiddleware` re-reads `is_admin` from the database on every request rather than trusting a token claim, so a revoked role takes effect immediately instead of when the token expires.
+
+### 3. Catalogue and discovery
+* Paginated browse with title search (`ILIKE`) and **exact, indexed genre filtering** via an `EXISTS` against the bridge table.
+* `GET /api/anime/genres` for filter dropdowns, with per-genre counts.
+* Trending: 5-table `LEFT JOIN` with a 7-day activity window.
+* `top_by_genre` materialized view, ranked with `RANK() OVER (PARTITION BY ...)`.
+
+### 4. Watchlist and trigger automation
+* Full CRUD with a partial `PATCH` that builds a parameterized `SET` from whichever fields arrive.
+* **`fn_episode_check`** auto-completes when `episodes_watched` reaches `episode_count`.
+* **`fn_set_finish_date`** stamps `finished_at`. Named `trg_a_`/`trg_b_` because `BEFORE` triggers on one table fire in alphabetical order — the name *is* the sequencing mechanism.
+* **`fn_log_watchlist`** writes `activity_log`. No route inserts into it.
+
+### 5. Reviews and voting
+* **`fn_review_guard`** — `BEFORE INSERT` trigger that queries `watchlist` and `RAISE EXCEPTION`s unless the anime is completed. The API never pre-checks; it converts the database error into HTTP 400.
+* **`fn_update_anime_score`** recomputes `anime.score` on every insert, update *and* delete, falling back to `mal_score` when no reviews remain.
+* **`fn_flag_review_edited`** — conditional (`WHEN`) trigger, so bumping `helpful_count` doesn't falsely mark a review edited.
+* **`cast_helpful_vote`** procedure with `EXCEPTION WHEN unique_violation`; voting is a toggle, and `DELETE` reaches the same trigger to decrement.
+
+### 6. Social graph and notifications
+* Self-referential M:N `followers`, guarded by both a `CHECK` constraint and `fn_block_self_follow`.
+* Follower and following lists — the same table read from opposite ends.
+* **Notifications are written entirely by triggers.** Grep `backend/routes/` for `INSERT INTO notifications`; there isn't one.
+* Unread count endpoint and a single-statement mark-all-read.
+
+### 7. Episode discussions
+* Per-episode threads with edit and delete of your own comment, ownership enforced in the SQL `WHERE` clause.
+* **`trg_discussion_edit_flag`** — same conditional-`WHEN` pattern as reviews.
+* **`trg_notify_discussion`** — a new comment notifies every earlier participant except the author, as one `INSERT ... SELECT`, `DISTINCT` so a repeat commenter is notified once.
+* **`episode_card_view`** carries `comment_count` per episode, so a whole season's activity renders in one query.
+* **`get_recent_discussions()`** powers a site-wide feed on the home page.
+
+### 8. Profile analytics
+* **`get_user_stats`** — six statistics, `RETURNS TABLE` + `FILTER`, one round trip.
+* **`recommend_anime`** — explicit `CURSOR` over completed genres, accumulating into a `TEMP TABLE ... ON COMMIT DROP`.
+* **`get_watch_history`** — keyset pagination (`WHERE id > last_seen`), which costs the same on page 100 as page 1.
+
+---
+
+## ⚡ Database objects
+
+| File | Contents |
+|---|---|
+| [01_schema.sql](backend/sql/01_schema.sql) | 14 tables, PK/FK, cascades, `CHECK` constraints, 7 indexes |
+| [02_triggers.sql](backend/sql/02_triggers.sql) | 11 triggers — scoring, guards, episode check, audit log, notifications |
+| [03_functions.sql](backend/sql/03_functions.sql) | `get_user_stats`, `recommend_anime` (cursor), `get_watch_history` (keyset) |
+| [04_procedures.sql](backend/sql/04_procedures.sql) | `cast_helpful_vote`, `bulk_drop_inactive` |
+| [05_views.sql](backend/sql/05_views.sql) | `anime_card_view`, `top_by_genre` (materialized) |
+| [06_discussions.sql](backend/sql/06_discussions.sql) | Discussion edit flag, reply notifications, `episode_card_view`, `get_recent_discussions`, `get_anime_discussion_stats` |
+| [seed.js](backend/sql/seed.js) | Jikan import — idempotent, resumable, paginated |
+
+**Totals:** 14 tables · 13 triggers · 5 PL/pgSQL functions · 2 procedures · 2 views · 1 materialized view · 7 indexes.
+
+---
+
+## 📡 API reference
+
+### Auth (`/api/auth`)
+* `POST /register` — `{username, email, password}`
+* `POST /login` — `{email, password}`
+* `GET /me` 🔒
+
+### Anime (`/api/anime`)
+* `GET /` — browse (`?page=1&q=naruto&genre=Action`)
+* `GET /genres` — genre list with counts
+* `GET /trending` — top 20 this week
+* `GET /top?genre=` — from the `top_by_genre` matview
+* `GET /:id` — anime + genres, studios, episodes (with comment counts), discussion stats
+
+### Admin (`/api/admin`) 🔑 *admin only*
+* `POST /refresh` — `REFRESH MATERIALIZED VIEW top_by_genre`
+* `POST /bulk-drop` — `CALL bulk_drop_inactive(months)`, returns the `RAISE NOTICE` output
+
+### Watchlist (`/api/watchlist`) 🔒
+* `GET /me` · `POST /` · `PATCH /:animeId` · `DELETE /:animeId`
+
+### Reviews (`/api/reviews`)
+* `GET /anime/:animeId`
+* `GET /anime/:animeId/my-votes` 🔒
+* `POST /` 🔒 — 400 if `trg_review_guard` fires
+* `PATCH /:reviewId` 🔒 · `DELETE /:reviewId` 🔒
+* `POST /:reviewId/helpful` 🔒 · `DELETE /:reviewId/helpful` 🔒
+
+### Social (`/api`) 🔒
+* `POST|DELETE /users/:id/follow`
+* `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/read-all` · `PATCH /notifications/:id/read`
+
+### Episodes (`/api/episodes`)
+* `GET /recent-discussions?limit=`
+* `GET /:episodeId/discussions`
+* `POST /:episodeId/discussions` 🔒
+* `PATCH|DELETE /discussions/:discussionId` 🔒
+
+### Users (`/api/users`)
+* `GET /:id` · `GET /:id/stats` · `GET /:id/followers` · `GET /:id/following`
+* `GET /:id/follow-status` 🔒
+* `GET /me/recommendations` 🔒 · `GET /me/history?after=&limit=` 🔒 · `GET /me/activity?limit=` 🔒
+
+🔒 requires a JWT · 🔑 requires `is_admin`
+
+---
+
+## 🎓 Demo page
+
+`/demo` is a purpose-built panel for the presentation: a click → concept cheat sheet, a health
+check, the materialized-view refresh, and the batch procedure with its `RAISE NOTICE` output. The
+maintenance buttons need an admin account.
+
+Throughout the UI, inline `Concept` labels name the exact database object behind each feature —
+"Keyset Pagination via get_watch_history", "Stored procedure cast_helpful_vote", and so on.
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Scaffolding, schema, triggers, functions, procedures, views
+- [x] Jikan seeding pipeline
+- [x] Auth + JWT middleware
+- [x] Catalogue, search, trending, leaderboards
+- [x] Watchlist with trigger automation
+- [x] Reviews, guard trigger, helpful voting
+- [x] Social graph and trigger-written notifications
+- [x] Episode discussions with edit, delete, counts and reply notifications
+- [x] Recommendations, stats, keyset history
+- [x] Admin-guarded maintenance procedures
+- [x] One-command database setup, dump/restore, verification
+- [ ] Full-text search (`tsvector` + GIN)
+- [ ] Scheduled matview refresh (`pg_cron`)
+- [ ] Row-level security

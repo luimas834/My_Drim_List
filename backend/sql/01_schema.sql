@@ -13,6 +13,8 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     profile_pic   TEXT,
     bio           TEXT,
+    is_admin      BOOLEAN DEFAULT FALSE,      -- gates the maintenance routes;
+                                              -- grant with: npm run db:make-admin -- <email>
     created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -25,6 +27,8 @@ CREATE TABLE anime (
     episode_count INT,
     status        VARCHAR(30),
     score         NUMERIC(4,2),               -- aggregate, maintained ONLY by trigger
+    mal_score     NUMERIC(4,2),               -- the score Jikan gave us; the fallback
+                                              -- when this anime has no reviews yet
     aired_from    DATE,
     aired_to      DATE,
     created_at    TIMESTAMP DEFAULT NOW()
@@ -101,6 +105,8 @@ CREATE TABLE episode_discussions (
     episode_id    INT REFERENCES episodes(episode_id) ON DELETE CASCADE,
     user_id       INT REFERENCES users(user_id)       ON DELETE CASCADE,
     comment       TEXT NOT NULL,
+    is_edited     BOOLEAN DEFAULT FALSE,      -- both maintained by trg_discussion_edit_flag
+    edited_at     TIMESTAMP,
     created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -137,3 +143,5 @@ CREATE INDEX idx_watchlist_status ON watchlist(status);
 CREATE INDEX idx_reviews_anime    ON reviews(anime_id);
 CREATE INDEX idx_anime_genres_g   ON anime_genres(genre_id);
 CREATE INDEX idx_notif_user       ON notifications(user_id);
+CREATE INDEX idx_episodes_anime   ON episodes(anime_id);          -- episode list per anime
+CREATE INDEX idx_discussions_ep   ON episode_discussions(episode_id);  -- thread + comment counts

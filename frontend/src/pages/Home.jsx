@@ -6,6 +6,8 @@ import { AnimeCard, Loading, Banner, Concept, Btn } from "../ui";
 export default function Home() {
   const trendingFetch = useFetch(() => Api.trending());
   const topFetch = useFetch(() => Api.top());
+  const discussionsFetch = useFetch(() => Api.recentDiscussions(8));
+  const studiosFetch = useFetch(() => Api.topStudios(8, 2));
   const [visibleGenreCount, setVisibleGenreCount] = useState(5);
 
   const loading = trendingFetch.loading || topFetch.loading;
@@ -85,6 +87,79 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {/* Studio leaderboard — the anime_studios M:N doing visible work */}
+      {studiosFetch.data && studiosFetch.data.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-accent">Top Studios</h2>
+            <Concept>
+              get_top_studios() over studio_card_view — aggregate across the anime_studios bridge,
+              RANK() window, HAVING-style minimum so a one-hit studio can't top the table
+            </Concept>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {studiosFetch.data.map((s) => (
+              <Link
+                key={s.studio_id}
+                to={`/browse?studio=${encodeURIComponent(s.name)}`}
+                className="card p-3 hover:border-accent/60 transition-colors space-y-1"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted font-bold">#{s.rnk}</span>
+                  <span className="text-sm font-bold text-accent">★ {s.avg_score ?? "—"}</span>
+                </div>
+                <p className="text-sm font-semibold text-text truncate" title={s.name}>
+                  {s.name}
+                </p>
+                <p className="text-xs text-muted">
+                  {s.anime_count} title{s.anime_count === 1 ? "" : "s"}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Latest episode discussions — one function call, already joined */}
+      {discussionsFetch.data && discussionsFetch.data.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-accent">Latest Episode Discussions</h2>
+            <Concept>get_recent_discussions() — comment ⋈ user ⋈ episode ⋈ anime in one call</Concept>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {discussionsFetch.data.map((d) => (
+              <Link
+                key={d.discussion_id}
+                to={`/anime/${d.anime_id}`}
+                className="card flex gap-3 p-3 hover:border-accent/60 transition-colors"
+              >
+                {d.cover_image && (
+                  <img
+                    src={d.cover_image}
+                    alt={d.anime_title}
+                    className="w-12 h-16 object-cover rounded shrink-0"
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                  />
+                )}
+                <div className="min-w-0 space-y-1">
+                  <p className="text-xs text-muted truncate">
+                    <span className="text-accent font-semibold">{d.username}</span> on{" "}
+                    <span className="text-text font-medium">{d.anime_title}</span> · Ep{" "}
+                    {d.episode_number}
+                  </p>
+                  <p className="text-sm text-text/90 line-clamp-2">{d.comment}</p>
+                  <p className="text-[0.65rem] text-muted">
+                    {d.is_edited && <span className="italic">edited · </span>}
+                    {d.created_at?.substring(0, 10)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

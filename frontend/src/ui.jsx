@@ -59,6 +59,13 @@ export function AnimeCard({ anime }) {
     ? anime.genres.split(", ").filter(Boolean)
     : [];
 
+  const studioList = Array.isArray(anime.studios)
+    ? anime.studios.map((s) => (typeof s === "object" ? s.name : s))
+    : typeof anime.studios === "string"
+    ? anime.studios.split(", ").filter(Boolean)
+    : [];
+  const studioLabel = studioList.slice(0, 2).join(", ");
+
   return (
     <Link
       to={`/anime/${anime.anime_id}`}
@@ -86,9 +93,18 @@ export function AnimeCard({ anime }) {
         )}
       </div>
       <div className="p-3 flex flex-col flex-1 justify-between gap-2">
-        <h3 className="font-semibold text-sm line-clamp-2 text-text group-hover:text-accent transition-colors">
-          {anime.title}
-        </h3>
+        <div className="space-y-1">
+          <h3 className="font-semibold text-sm line-clamp-2 text-text group-hover:text-accent transition-colors">
+            {anime.title}
+          </h3>
+          {/* studios came back from anime_card_view's STRING_AGG all along and
+              were never displayed anywhere except the detail page */}
+          {studioLabel && (
+            <p className="text-xs text-muted truncate" title={studioLabel}>
+              {studioLabel}
+            </p>
+          )}
+        </div>
         {genreList.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {genreList.slice(0, 2).map((g, idx) => (

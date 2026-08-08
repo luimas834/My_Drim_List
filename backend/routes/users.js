@@ -80,11 +80,62 @@ router.get("/:id/stats", async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
-    const { rows } = await db.query("SELECT * FROM get_user_stats($1)", [userId]);
+    // get_user_stats aggregates over watchlist, and COUNT(*) over no rows is 0,
+    // not "no rows" — so the function returns a row of zeros for a user id that
+    // does not exist and the 404 below could never fire. Gating on EXISTS makes
+    // the result set genuinely empty for an unknown user, still in one query.
+    const { rows } = await db.query(
+      `SELECT s.* FROM get_user_stats($1) s
+       WHERE EXISTS (SELECT 1 FROM users WHERE user_id = $1)`,
+      [userId]
+    );
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
     res.json(rows[0]);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/users/:id/followers - who follows this user
+// followers is a self-referential M:N, so both directions are the same table
+// read from opposite ends: followers joins on follower_id, following on
+// following_id. That symmetry is the whole point of the design.
+router.get("/:id/followers", async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
+    const { rows } = await db.query(
+      `SELECT u.user_id, u.username, u.profile_pic, u.bio, f.followed_at
+       FROM followers f
+       JOIN users u ON u.user_id = f.follower_id
+       WHERE f.following_id = $1
+       ORDER BY f.followed_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/users/:id/following - who this user follows
+router.get("/:id/following", async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) return res.status(400).json({ error: "Invalid user ID" });
+    const { rows } = await db.query(
+      `SELECT u.user_id, u.username, u.profile_pic, u.bio, f.followed_at
+       FROM followers f
+       JOIN users u ON u.user_id = f.following_id
+       WHERE f.follower_id = $1
+       ORDER BY f.followed_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });
   }

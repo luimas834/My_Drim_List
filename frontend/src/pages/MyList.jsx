@@ -40,11 +40,28 @@ export default function MyList() {
     }
   };
 
+  // Derived from the list we already have — no extra request just to count.
+  const unreadCount = React.useMemo(
+    () => (notifFetch.data || []).filter((n) => !n.is_read).length,
+    [notifFetch.data]
+  );
+
   // Mark notification read
   const handleReadNotif = async (id) => {
     setNotifErr(null);
     try {
       await Api.readNotif(id);
+      notifFetch.reload();
+    } catch (err) {
+      setNotifErr(errMsg(err));
+    }
+  };
+
+  // Mark every unread one read — a single UPDATE server-side, not N requests
+  const handleReadAll = async () => {
+    setNotifErr(null);
+    try {
+      await Api.readAllNotifs();
       notifFetch.reload();
     } catch (err) {
       setNotifErr(errMsg(err));
@@ -144,9 +161,26 @@ export default function MyList() {
 
       {/* 2. Notifications Section */}
       <section className="space-y-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-xl font-bold text-text">Notifications</h2>
-          <Concept>Written by AFTER triggers fn_notify_new_follower & fn_notify_new_review</Concept>
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-xl font-bold text-text">Notifications</h2>
+            {unreadCount > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-bg font-bold">
+                {unreadCount} unread
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {unreadCount > 0 && (
+              <Btn variant="ghost" className="text-xs py-1 px-2" onClick={handleReadAll}>
+                Mark all read
+              </Btn>
+            )}
+            <Concept>
+              Written by AFTER triggers fn_notify_new_follower, fn_notify_new_review &amp;
+              fn_notify_discussion_reply
+            </Concept>
+          </div>
         </div>
 
         <Banner type="err" message={notifErr} />

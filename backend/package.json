@@ -1,11 +1,20 @@
 {
   "name": "mdl-backend",
   "version": "1.0.0",
-  "description": "My Drim List backend — thin Express messenger over a fat PostgreSQL database",
+  "description": "My Drim List backend \u2014 thin Express messenger over a fat PostgreSQL database",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "seed": "node sql/seed.js"
+    "seed": "node sql/seed.js",
+    "db:setup": "node sql/setup.js",
+    "db:reset": "node sql/setup.js",
+    "db:seed": "node sql/seed.js",
+    "db:dump": "node sql/dump.js",
+    "db:restore": "node sql/restore.js",
+    "db:verify": "node sql/verify.js",
+    "db:make-admin": "node sql/make-admin.js",
+    "db:seed:anilist": "node sql/seed-anilist.js",
+    "db:sql": "node sql/query.js"
   },
   "license": "MIT",
   "dependencies": {

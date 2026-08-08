@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Api, useFetch, fmtScore, errMsg, num } from "../api";
+import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
 import { Card, Tag, Btn, Banner, Concept, Loading } from "../ui";
 
@@ -12,9 +12,25 @@ export default function AnimeDetail() {
   const animeFetch = useFetch(() => Api.anime(animeId), [animeId]);
   const watchlistFetch = useFetch(() => (user ? Api.watchlist() : Promise.resolve([])), [user]);
   const reviewsFetch = useFetch(() => Api.reviews(animeId), [animeId]);
+  const votesFetch = useFetch(
+    () => (user ? Api.myVotes(animeId) : Promise.resolve([])),
+    [user, animeId]
+  );
+  const myVotes = React.useMemo(() => votesFetch.data || [], [votesFetch.data]);
 
   // Expanded episode state
   const [expandedEpisodeId, setExpandedEpisodeId] = useState(null);
+  const [onlyDiscussed, setOnlyDiscussed] = useState(false);
+
+  // Discussion activity, all of it computed server-side (episode_card_view +
+  // get_anime_discussion_stats). We only decide what to render.
+  const stats = animeFetch.data?.discussion_stats || null;
+  const allEpisodes = React.useMemo(() => animeFetch.data?.episodes || [], [animeFetch.data]);
+  const discussedEpisodes = React.useMemo(
+    () => allEpisodes.filter((e) => Number(e.comment_count) > 0),
+    [allEpisodes]
+  );
+  const visibleEpisodes = onlyDiscussed ? discussedEpisodes : allEpisodes;
 
   // Watchlist entry state
   const myWatchlistEntry = React.useMemo(() => {
@@ -108,8 +124,11 @@ export default function AnimeDetail() {
     }
   };
 
-  // Review submission handler
-  const handlePostReview = async (force = false) => {
+  // Review submission handler.
+  // The "Try anyway" button passes true purely to make the call site read as a
+  // deliberate guard demo — the request is identical either way, because the
+  // point is that trg_review_guard, not the client, decides.
+  const handlePostReview = async (_demoGuardBypass = false) => {
     setReviewErr(null);
     setReviewMsg(null);
     setReviewSubmitting(true);
@@ -131,11 +150,20 @@ export default function AnimeDetail() {
   };
 
   // Helpful vote handler
+  // Toggle: cast_helpful_vote inserts, DELETE removes and trg_helpful_count
+  // decrements. Knowing which reviews I have already voted on comes from the
+  // server (my-votes) rather than being assumed, so a refresh doesn't reset it.
   const handleHelpful = async (reviewId) => {
     setHelpfulErr(null);
+    const alreadyVoted = myVotes.includes(reviewId);
     try {
-      await Api.helpful(reviewId);
+      if (alreadyVoted) {
+        await Api.unhelpful(reviewId);
+      } else {
+        await Api.helpful(reviewId);
+      }
       reviewsFetch.reload();
+      votesFetch.reload();
     } catch (err) {
       setHelpfulErr(errMsg(err));
     }
@@ -222,7 +250,18 @@ export default function AnimeDetail() {
           {/* Studios */}
           {anime.studios && anime.studios.length > 0 && (
             <div className="text-xs text-muted">
-              Studios: <span className="text-text font-medium">{anime.studios.map((s) => s.name).join(", ")}</span>
+              Studios:{" "}
+              {anime.studios.map((s, i) => (
+                <React.Fragment key={s.studio_id}>
+                  {i > 0 && ", "}
+                  <Link
+                    to={`/browse?studio=${encodeURIComponent(s.name)}`}
+                    className="text-text font-medium hover:text-accent underline decoration-dotted"
+                  >
+                    {s.name}
+                  </Link>
+                </React.Fragment>
+              ))}
             </div>
           )}
 
@@ -461,10 +500,20 @@ export default function AnimeDetail() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-line text-xs">
                     <div className="flex items-center gap-3">
-                      <Btn variant="ghost" className="py-1 px-2.5 text-xs" onClick={() => handleHelpful(r.review_id)}>
-                        👍 Helpful ({r.helpful_count})
+                      <Btn
+                        variant={myVotes.includes(r.review_id) ? "primary" : "ghost"}
+                        className="py-1 px-2.5 text-xs"
+                        disabled={!user}
+                        title={user ? "" : "Log in to vote"}
+                        onClick={() => handleHelpful(r.review_id)}
+                      >
+                        👍 {myVotes.includes(r.review_id) ? "Helpful ✓" : "Helpful"} ({r.helpful_count})
                       </Btn>
-                      <Concept>Stored procedure cast_helpful_vote</Concept>
+                      <Concept>
+                        {myVotes.includes(r.review_id)
+                          ? "DELETE review_votes → trg_helpful_count decrements"
+                          : "CALL cast_helpful_vote → trg_helpful_count increments"}
+                      </Concept>
                     </div>
 
                     {isMine && !isEditing && (
@@ -496,43 +545,123 @@ export default function AnimeDetail() {
 
       {/* Episode Discussion Threads */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-accent">Episodes & Discussions</h2>
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <h2 className="text-xl font-bold text-accent">Episodes &amp; Discussions</h2>
+          {stats && stats.total_comments > 0 && (
+            <span className="text-xs text-muted">
+              <strong className="text-text">{stats.total_comments}</strong> comment
+              {stats.total_comments === 1 ? "" : "s"} from{" "}
+              <strong className="text-text">{stats.participants}</strong> user
+              {stats.participants === 1 ? "" : "s"} across{" "}
+              <strong className="text-text">{stats.episodes_with_comments}</strong> episode
+              {stats.episodes_with_comments === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+        <Concept>
+          episode_card_view supplies each episode's comment_count in one query; totals come from
+          get_anime_discussion_stats()
+        </Concept>
 
         {anime.episodes && anime.episodes.length > 0 ? (
-          <div className="space-y-2">
-            {anime.episodes.map((ep) => (
-              <EpisodeAccordion
-                key={ep.episode_id}
-                episode={ep}
-                isExpanded={expandedEpisodeId === ep.episode_id}
-                onToggle={() => setExpandedEpisodeId(expandedEpisodeId === ep.episode_id ? null : ep.episode_id)}
-                user={user}
-              />
-            ))}
-          </div>
+          <>
+            {discussedEpisodes.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={onlyDiscussed}
+                  onChange={(e) => setOnlyDiscussed(e.target.checked)}
+                />
+                Show only episodes with comments ({discussedEpisodes.length})
+              </label>
+            )}
+            <div className="space-y-2">
+              {visibleEpisodes.map((ep) => (
+                <EpisodeAccordion
+                  key={ep.episode_id}
+                  episode={ep}
+                  isExpanded={expandedEpisodeId === ep.episode_id}
+                  onToggle={() => setExpandedEpisodeId(expandedEpisodeId === ep.episode_id ? null : ep.episode_id)}
+                  user={user}
+                  onCountChange={() => animeFetch.reload()}
+                />
+              ))}
+            </div>
+          </>
         ) : (
-          <Card className="text-center py-6 text-muted">No episodes indexed for this title.</Card>
+          <Card className="text-center py-6 text-muted space-y-2">
+            <p>No episodes indexed for this title.</p>
+            <p className="text-xs">
+              Episodes come from the Jikan seed. Run{" "}
+              <code className="text-accent">npm run db:seed</code> to fetch them for every anime.
+            </p>
+          </Card>
         )}
       </div>
     </div>
   );
 }
 
-function EpisodeAccordion({ episode, isExpanded, onToggle, user }) {
-  const discussionsFetch = useFetch(() => (isExpanded ? Api.discussions(episode.episode_id) : Promise.resolve([])), [isExpanded, episode.episode_id]);
+function EpisodeAccordion({ episode, isExpanded, onToggle, user, onCountChange }) {
+  const discussionsFetch = useFetch(
+    () => (isExpanded ? Api.discussions(episode.episode_id) : Promise.resolve([])),
+    [isExpanded, episode.episode_id]
+  );
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
+  // which comment is currently being edited, and its working text
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+
+  // comment_count comes from episode_card_view with the page load; once the user
+  // starts posting in this thread the fetched list is the fresher number
+  const count = discussionsFetch.data ? discussionsFetch.data.length : Number(episode.comment_count) || 0;
+
+  const refresh = () => {
+    discussionsFetch.reload();
+    onCountChange?.(); // re-pull the anime so header totals stay honest
+  };
+
   const handlePostComment = async (e) => {
     e.preventDefault();
-    if (!comment) return;
+    if (!comment.trim()) return;
     setSubmitting(true);
     setErr(null);
     try {
       await Api.postDiscussion(episode.episode_id, comment);
       setComment("");
-      discussionsFetch.reload();
+      refresh();
+    } catch (error) {
+      setErr(errMsg(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveEdit = async (discussionId) => {
+    if (!editText.trim()) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await Api.patchDiscussion(discussionId, editText);
+      setEditingId(null);
+      setEditText("");
+      refresh();
+    } catch (error) {
+      setErr(errMsg(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (discussionId) => {
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await Api.deleteDiscussion(discussionId);
+      refresh();
     } catch (error) {
       setErr(errMsg(error));
     } finally {
@@ -542,12 +671,19 @@ function EpisodeAccordion({ episode, isExpanded, onToggle, user }) {
 
   return (
     <Card className="p-3">
-      <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
-        <div className="flex items-center gap-3">
-          <span className="font-bold text-accent">Ep {episode.episode_number}</span>
-          <span className="font-medium text-text">{episode.title}</span>
+      <div className="flex items-center justify-between cursor-pointer gap-3" onClick={onToggle}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-bold text-accent shrink-0">Ep {episode.episode_number}</span>
+          <span className="font-medium text-text truncate">{episode.title || "Untitled"}</span>
         </div>
-        <span className="text-xs text-muted">{isExpanded ? "▲ Collapse" : "▼ Discuss"}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          {count > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30 font-semibold">
+              💬 {count}
+            </span>
+          )}
+          <span className="text-xs text-muted">{isExpanded ? "▲ Collapse" : "▼ Discuss"}</span>
+        </div>
       </div>
 
       {isExpanded && (
@@ -557,33 +693,110 @@ function EpisodeAccordion({ episode, isExpanded, onToggle, user }) {
             <Loading text="Loading comments..." />
           ) : discussionsFetch.data && discussionsFetch.data.length > 0 ? (
             <div className="space-y-2">
-              {discussionsFetch.data.map((c) => (
-                <div key={c.discussion_id} className="bg-bg/60 p-2.5 rounded border border-line/60 text-xs space-y-1">
-                  <div className="flex justify-between font-semibold">
-                    <span className="text-accent">{c.username}</span>
-                    <span className="text-muted">{c.created_at?.substring(0, 10)}</span>
+              {discussionsFetch.data.map((c) => {
+                const isMine = user && c.user_id === user.user_id;
+                const isEditing = editingId === c.discussion_id;
+
+                return (
+                  <div
+                    key={c.discussion_id}
+                    className="bg-bg/60 p-2.5 rounded border border-line/60 text-xs space-y-1"
+                  >
+                    <div className="flex justify-between font-semibold gap-2">
+                      <span className="text-accent">
+                        {c.username}
+                        {isMine && <span className="text-muted font-normal"> (you)</span>}
+                      </span>
+                      <span className="text-muted shrink-0">
+                        {c.is_edited && <span className="italic mr-1">edited ·</span>}
+                        {c.created_at?.substring(0, 10)}
+                      </span>
+                    </div>
+
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          rows="2"
+                          className="w-full bg-bg border border-line rounded p-2 text-xs text-text focus:border-accent outline-none"
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Btn
+                            className="py-1 text-xs"
+                            disabled={submitting || !editText.trim()}
+                            onClick={() => handleSaveEdit(c.discussion_id)}
+                          >
+                            Save
+                          </Btn>
+                          <Btn
+                            variant="ghost"
+                            className="py-1 text-xs"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancel
+                          </Btn>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-text whitespace-pre-wrap">{c.comment}</p>
+                        {isMine && (
+                          <div className="flex gap-3 pt-1">
+                            <button
+                              className="text-muted hover:text-accent underline"
+                              onClick={() => {
+                                setEditingId(c.discussion_id);
+                                setEditText(c.comment);
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="text-muted hover:text-red-400 underline"
+                              disabled={submitting}
+                              onClick={() => handleDelete(c.discussion_id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <p className="text-text">{c.comment}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-xs text-muted italic">No comments yet on this episode.</p>
           )}
 
-          {user && (
-            <form onSubmit={handlePostComment} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Write a comment..."
-                className="flex-1 bg-bg border border-line rounded px-3 py-1.5 text-xs text-text focus:border-accent outline-none"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-              <Btn type="submit" disabled={submitting || !comment} className="py-1 text-xs">
-                Post
-              </Btn>
-            </form>
+          {user ? (
+            <>
+              <form onSubmit={handlePostComment} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Write a comment..."
+                  className="flex-1 bg-bg border border-line rounded px-3 py-1.5 text-xs text-text focus:border-accent outline-none"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+                <Btn type="submit" disabled={submitting || !comment.trim()} className="py-1 text-xs">
+                  Post
+                </Btn>
+              </form>
+              <Concept>
+                Posting fires trg_notify_discussion — everyone already in this thread gets a
+                notification. Editing fires trg_discussion_edit_flag (WHEN the text actually changed).
+              </Concept>
+            </>
+          ) : (
+            <p className="text-xs text-muted italic">
+              <Link to="/login" className="text-accent underline">
+                Log in
+              </Link>{" "}
+              to join the discussion.
+            </p>
           )}
         </div>
       )}

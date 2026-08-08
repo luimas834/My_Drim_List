@@ -1,6 +1,7 @@
 import React from "react";
-import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth, ProtectedRoute } from "./auth";
+import { Api } from "./api";
 import { Btn } from "./ui";
 
 import Home from "./pages/Home";
@@ -14,6 +15,21 @@ import { Login, Register } from "./pages/Auth";
 export default function App() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Unread badge. One COUNT query, re-run on navigation rather than on a timer —
+  // notifications here are created by triggers during the user's own session, so
+  // route changes are the moments the number can actually have moved.
+  const [unread, setUnread] = React.useState(0);
+  React.useEffect(() => {
+    if (!user) {
+      setUnread(0);
+      return;
+    }
+    Api.unreadCount()
+      .then((r) => setUnread(Number(r.unread) || 0))
+      .catch(() => setUnread(0));
+  }, [user, location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -41,8 +57,16 @@ export default function App() {
                 Browse
               </Link>
               {user && (
-                <Link to="/my-list" className="hover:text-accent transition-colors">
+                <Link to="/my-list" className="hover:text-accent transition-colors flex items-center gap-1.5">
                   My List
+                  {unread > 0 && (
+                    <span
+                      title={`${unread} unread notification${unread === 1 ? "" : "s"}`}
+                      className="min-w-[1.15rem] h-[1.15rem] px-1 inline-flex items-center justify-center rounded-full bg-accent text-bg text-[0.65rem] font-bold"
+                    >
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </Link>
               )}
               {user && (
