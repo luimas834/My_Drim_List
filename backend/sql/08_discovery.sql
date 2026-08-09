@@ -31,10 +31,46 @@ CREATE TRIGGER trg_anime_search
 BEFORE INSERT OR UPDATE OF title, synopsis ON anime
 FOR EACH ROW EXECUTE FUNCTION fn_anime_search_vector();
 
--- Backfill existing rows by touching the column the trigger watches.
-UPDATE anime SET title = title WHERE search_vector IS NULL;
+-- Backfill directly rather than relying on the trigger firing from a no-op
+-- UPDATE. Duplicating the expression is worth not depending on trigger timing
+-- for the one statement that decides whether search works at all.
+UPDATE anime
+SET search_vector =
+        setweight(to_tsvector('english', COALESCE(title, '')),    'A') ||
+        setweight(to_tsvector('english', COALESCE(synopsis, '')), 'B')
+WHERE search_vector IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_anime_search ON anime USING GIN(search_vector);
+
+-- ---------------------------------------------------------------------------
+-- PARTIAL MATCHING
+-- ---------------------------------------------------------------------------
+-- Full-text search matches whole, stemmed words. That is right for "attack
+-- titan" and for searching synopses, and useless while somebody is still
+-- typing: "narut" is not a word, so it matches nothing, and every anime title
+-- is a proper noun a user is likely to half-remember or misspell.
+--
+-- pg_trgm indexes three-character sequences, which makes ILIKE '%narut%'
+-- indexable — an ordinary B-tree cannot help a leading wildcard. Searching then
+-- ORs the two together: full-text for meaning, trigram for what you typed.
+--
+-- Wrapped because CREATE EXTENSION needs privileges the app role may not have.
+-- If it fails, ILIKE still works correctly, just without the index — at this
+-- catalogue size that is imperceptible.
+DO $$
+BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_trgm';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_trgm unavailable (%). Partial search still works, unindexed.', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        CREATE INDEX IF NOT EXISTS idx_anime_title_trgm
+            ON anime USING GIN (title gin_trgm_ops);
+    END IF;
+END $$;
 
 -- websearch_to_tsquery understands quoted phrases, OR and -exclusions, and it
 -- never throws on malformed input the way to_tsquery does — which matters when
@@ -51,8 +87,13 @@ BEGIN
     LEFT JOIN anime_genres ag ON ag.anime_id = a.anime_id
     LEFT JOIN genres g        ON g.genre_id  = ag.genre_id
     WHERE a.search_vector @@ websearch_to_tsquery('english', p_query)
+       OR a.title ILIKE '%' || p_query || '%'   -- partial / mid-typing matches
     GROUP BY a.anime_id
-    ORDER BY ts_rank(a.search_vector, websearch_to_tsquery('english', p_query)) DESC,
+    -- A title that literally contains what was typed outranks a stemmed
+    -- full-text hit, because a user typing "cowboy" means the title, not a
+    -- synopsis that happens to mention cowboys.
+    ORDER BY (a.title ILIKE '%' || p_query || '%') DESC,
+             ts_rank(a.search_vector, websearch_to_tsquery('english', p_query)) DESC,
              a.score DESC NULLS LAST
     LIMIT p_limit;
 END; $$ LANGUAGE plpgsql;

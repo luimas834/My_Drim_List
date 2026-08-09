@@ -31,13 +31,17 @@ router.get("/", async (req, res) => {
     const params = [];
     const where = [];
     if (req.query.q) {
-      // Full-text match against the GIN-indexed tsvector. websearch_to_tsquery
-      // tolerates whatever the user typed; ILIKE '%q%' could not use an index
-      // and never matched the synopsis.
+      // Two index types for two query shapes, OR'd together:
+      //   - the GIN tsvector handles whole words, stemming and synopsis text,
+      //     so "attack titan" finds Attack on Titan
+      //   - the GIN trigram index on title handles partial input, so "narut"
+      //     matches while the user is still typing. Full-text alone cannot:
+      //     "narut" is not a word, so it stems to nothing and matches nothing
       params.push(req.query.q);
       where.push(`acv.anime_id IN (
         SELECT a2.anime_id FROM anime a2
         WHERE a2.search_vector @@ websearch_to_tsquery('english', $${params.length})
+           OR a2.title ILIKE '%' || $${params.length} || '%'
       )`);
     }
     if (req.query.year) {
