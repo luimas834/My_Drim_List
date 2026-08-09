@@ -58,8 +58,8 @@ Every command runs from the repo root.
 
 | Command | What it does |
 |---|---|
-| `npm run db:setup` | Applies every numbered `.sql` file in `backend/sql/` in order. **Destructive** — `01_schema.sql` starts with `DROP TABLE ... CASCADE`. |
-| `npm run db:reset` | Same thing. Named for when you mean it. |
+| `npm run db:setup` | Builds a new database, or applies newer migrations to an existing one. **Safe** — skips the destructive `01_schema.sql` if a catalogue is already there. Run it after every `git pull`. |
+| `npm run db:reset -- --all` | Full rebuild. **Destructive** — `01_schema.sql` drops every table. |
 | `npm run db:restore` | Loads the committed catalogue dump. Offline, seconds. **Use this on a new machine.** |
 | `npm run db:seed` | Fetches fresh data from Jikan. Needs internet, takes a few minutes. |
 | `npm run db:dump` | Exports the catalogue to `backend/sql/data/seed_data.sql` so teammates can restore it. Needs `pg_dump`. |
@@ -68,7 +68,7 @@ Every command runs from the repo root.
 | `npm run db:seed:anilist` | Seeds from AniList instead of Jikan — a second source for when one is down. |
 | `npm run db:sql -- "<SQL>"` | Runs SQL using the app's own `DATABASE_URL`. Avoids `psql`'s "role does not exist". `--q=users` lists canned queries. |
 
-`db:setup` accepts `--only=07` or `--from=06` to apply newer migrations without dropping your data.
+`db:setup` also accepts `--only=07`, `--from=06` and `--dry-run`.
 
 **Setting up on a second machine** used to mean five `psql` invocations plus a multi-minute seed.
 Now it's `createdb mdl && npm run setup`. The setup script uses the `pg` driver rather than shelling
