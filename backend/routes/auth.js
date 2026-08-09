@@ -4,6 +4,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -30,8 +31,7 @@ router.post("/register", async (req, res) => {
     res.status(201).json({ token: signToken(user.user_id), user });
   } catch (e) {
     if (e.code === "23505") return res.status(409).json({ error: "Username or email already exists" });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -56,8 +56,7 @@ router.post("/login", async (req, res) => {
     delete user.password_hash; // never leak the hash
     res.json({ token: signToken(user.user_id), user });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -72,8 +71,7 @@ router.get("/me", auth, async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

@@ -3,6 +3,7 @@
 //database triggers automatically update completion status, finished_at date, and activity_log.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -40,8 +41,7 @@ router.get("/me", auth, async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -64,8 +64,7 @@ router.post("/", auth, async (req, res) => {
     if (e.code === "23514") return res.status(400).json({ error: "Invalid status value" });
     if (e.code === "23503") return res.status(404).json({ error: "Anime not found" });
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -111,8 +110,7 @@ router.patch("/:animeId", auth, async (req, res) => {
   } catch (e) {
     if (e.code === "23514") return res.status(400).json({ error: "Invalid status, score, or episode count" });
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -134,8 +132,7 @@ router.delete("/:animeId", auth, async (req, res) => {
     res.json({ message: "Deleted successfully", watchlist: rows[0] });
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

@@ -10,6 +10,7 @@
 //   npm run db:make-admin -- your@email.com
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const requireAdmin = require("../middleware/adminMiddleware");
 
 const router = express.Router();
@@ -20,8 +21,7 @@ router.post("/refresh", requireAdmin, async (req, res) => {
     await db.query("REFRESH MATERIALIZED VIEW top_by_genre");
     res.json({ status: "ok", refreshed: "top_by_genre" });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -42,8 +42,7 @@ router.post("/bulk-drop", requireAdmin, async (req, res) => {
     }
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

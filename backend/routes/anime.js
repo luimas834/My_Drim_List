@@ -3,6 +3,7 @@
 // IMPORTANT: /trending and /top are declared BEFORE /:id so they aren't captured by it.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 
 const router = express.Router();
 
@@ -94,8 +95,7 @@ router.get("/", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -115,8 +115,7 @@ router.get("/genres", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -129,8 +128,7 @@ router.get("/search", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM search_anime($1, $2)", [q, limit]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -145,8 +143,7 @@ router.get("/random", async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: "Catalogue is empty" });
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -156,8 +153,7 @@ router.get("/years", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_catalogue_years()");
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -171,8 +167,7 @@ router.get("/statuses", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -187,8 +182,7 @@ router.get("/studios", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -200,8 +194,7 @@ router.get("/studios/top", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_top_studios($1, $2)", [limit, min]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -219,8 +212,7 @@ router.get("/studios/:studioId", async (req, res) => {
     if (!studioQ.rows[0]) return res.status(404).json({ error: "Studio not found" });
     res.json({ ...studioQ.rows[0], anime: animeQ.rows });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -241,8 +233,7 @@ router.get("/trending", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -264,8 +255,7 @@ router.get("/top", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -278,8 +268,7 @@ router.get("/:id/similar", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_similar_anime($1, $2)", [id, limit]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -291,8 +280,7 @@ router.get("/:id/score-distribution", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_score_distribution($1)", [id]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -342,8 +330,7 @@ router.get("/:id", async (req, res) => {
       },
     });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

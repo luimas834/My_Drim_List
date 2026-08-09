@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -48,8 +49,7 @@ router.get("/", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -91,8 +91,7 @@ router.patch("/me", auth, async (req, res) => {
     res.json(rows[0]);
   } catch (e) {
     if (e.code === "23505") return res.status(409).json({ error: "That username is taken" });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -105,8 +104,7 @@ router.get("/me/recommendations", auth, async (req, res) => {
     res.json(rows);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   } finally {
     client.release();
   }
@@ -121,8 +119,7 @@ router.get("/me/history", auth, async (req, res) => {
     res.json(rows);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -142,8 +139,7 @@ router.get("/me/activity", auth, async (req, res) => {
     res.json(rows);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -162,8 +158,7 @@ router.get("/:id", async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -185,8 +180,7 @@ router.get("/:id/stats", async (req, res) => {
     res.json(rows[0]);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -220,8 +214,7 @@ router.get("/:id/watchlist", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -242,8 +235,7 @@ router.get("/:id/reviews", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -265,8 +257,7 @@ router.get("/:id/followers", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -285,8 +276,7 @@ router.get("/:id/following", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -301,8 +291,7 @@ router.get("/:id/follow-status", auth, async (req, res) => {
     );
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

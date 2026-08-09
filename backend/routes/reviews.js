@@ -3,6 +3,7 @@
 //helpful count are all enforced by database triggers and the cast_helpful_vote procedure.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -33,8 +34,7 @@ router.get("/anime/:animeId", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -58,8 +58,7 @@ router.post("/", auth, async (req, res) => {
     if (e.code === "23505") return res.status(409).json({ error: "You already reviewed this anime" });
     if (e.code === "23503") return res.status(404).json({ error: "Anime not found" });
     if (e.code === "23514") return res.status(400).json({ error: "Score must be between 1 and 10" });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -99,8 +98,7 @@ router.patch("/:reviewId", auth, async (req, res) => {
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
     if (e.code === "23514") return res.status(400).json({ error: "Score must be between 1 and 10" });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -118,8 +116,7 @@ router.delete("/:reviewId", auth, async (req, res) => {
 
     res.json({ message: "Deleted successfully", review: rows[0] });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -136,8 +133,7 @@ router.post("/:reviewId/helpful", auth, async (req, res) => {
   } catch (e) {
     //DUPLICATE_VOTE: / INVALID_VOTE: raised inside cast_helpful_vote
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -164,8 +160,7 @@ router.delete("/:reviewId/helpful", auth, async (req, res) => {
     res.json(after[0]);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -182,8 +177,7 @@ router.get("/anime/:animeId/my-votes", auth, async (req, res) => {
     );
     res.json(rows.map((r) => r.review_id));
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

@@ -3,6 +3,7 @@
 //notifications rows are written by triggers, never by this file.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -23,8 +24,7 @@ router.post("/users/:id/follow", auth, async (req, res) => {
     if (e.code === "23514") return res.status(400).json({ error: "You cannot follow yourself" });
     if (e.code === "23505") return res.status(409).json({ error: "Already following this user" });
     if (e.code === "23503") return res.status(404).json({ error: "User not found" });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -42,8 +42,7 @@ router.delete("/users/:id/follow", auth, async (req, res) => {
 
     res.json({ message: "Unfollowed successfully", follow: rows[0] });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -59,8 +58,7 @@ router.get("/notifications", auth, async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -77,8 +75,7 @@ router.get("/notifications/unread-count", auth, async (req, res) => {
     );
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -94,8 +91,7 @@ router.patch("/notifications/read-all", auth, async (req, res) => {
     );
     res.json({ marked_read: rowCount });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -115,8 +111,7 @@ router.patch("/notifications/:id/read", auth, async (req, res) => {
 
     res.json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
