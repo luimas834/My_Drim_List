@@ -127,6 +127,19 @@ async function main() {
       console.log("FAILED");
       console.error(`\n${file} failed:\n  ${e.message}`);
       if (e.position) console.error(`  at character ${e.position}`);
+      if (e.hint) console.error(`  hint: ${e.hint}`);
+
+      // Say plainly what did not run. Stopping at the first failure is correct —
+      // later migrations may depend on this one — but silently leaving the rest
+      // unapplied is how you end up with a half-migrated database and a
+      // confusing "relation does not exist" at runtime.
+      const remaining = files.slice(files.indexOf(file) + 1);
+      if (remaining.length) {
+        console.error(`\n  NOT applied because of this failure:`);
+        remaining.forEach((f) => console.error(`    - ${f}`));
+        console.error(`\n  Fix the error above, then run db:setup again.`);
+      }
+
       await client.end();
       process.exit(1);
     }
