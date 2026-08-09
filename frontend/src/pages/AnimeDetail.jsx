@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
-import { Card, Tag, Btn, Banner, Concept, Loading } from "../ui";
+import { Card, Tag, Btn, Banner, Concept, Loading, AnimeCard } from "../ui";
 
 export default function AnimeDetail() {
   const { id } = useParams();
@@ -11,7 +11,10 @@ export default function AnimeDetail() {
 
   const animeFetch = useFetch(() => Api.anime(animeId), [animeId]);
   const watchlistFetch = useFetch(() => (user ? Api.watchlist() : Promise.resolve([])), [user]);
-  const reviewsFetch = useFetch(() => Api.reviews(animeId), [animeId]);
+  const [reviewSort, setReviewSort] = useState("helpful");
+  const reviewsFetch = useFetch(() => Api.reviews(animeId, reviewSort), [animeId, reviewSort]);
+  const similarFetch = useFetch(() => Api.similar(animeId, 8), [animeId]);
+  const distFetch = useFetch(() => Api.scoreDistribution(animeId), [animeId]);
   const votesFetch = useFetch(
     () => (user ? Api.myVotes(animeId) : Promise.resolve([])),
     [user, animeId]
@@ -374,11 +377,53 @@ export default function AnimeDetail() {
         </Card>
       )}
 
+      {/* Score distribution — generate_series guarantees all ten buckets */}
+      {distFetch.data && distFetch.data.some((d) => d.review_count > 0) && (
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-accent">Score Distribution</h2>
+            <Concept>
+              get_score_distribution() — generate_series(1,10) LEFT JOINed to the tally, so a score
+              nobody gave still renders as an empty bar
+            </Concept>
+          </div>
+          <Card className="space-y-1.5 p-4">
+            {distFetch.data.map((d) => (
+              <div key={d.score_value} className="flex items-center gap-3 text-xs">
+                <span className="w-6 text-right font-semibold text-muted">{d.score_value}</span>
+                <div className="flex-1 h-4 bg-bg rounded overflow-hidden border border-line/60">
+                  <div
+                    className="h-full bg-accent/70 transition-all"
+                    style={{ width: `${d.percentage}%` }}
+                  />
+                </div>
+                <span className="w-20 text-muted">
+                  {d.review_count} ({d.percentage}%)
+                </span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
+
       {/* Reviews Section */}
       <div className="space-y-4">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold text-accent">User Reviews</h2>
-          <Concept>BEFORE INSERT trigger trg_review_guard enforces completion; AFTER trigger updates score</Concept>
+          <div className="flex items-center gap-3">
+            <select
+              className="bg-surface border border-line rounded px-2 py-1 text-text text-xs outline-none focus:border-accent"
+              value={reviewSort}
+              onChange={(e) => setReviewSort(e.target.value)}
+            >
+              <option value="helpful">Most helpful</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="highest">Highest score</option>
+              <option value="lowest">Lowest score</option>
+            </select>
+            <Concept>ORDER BY from a server-side whitelist — the key is interpolated</Concept>
+          </div>
         </div>
 
         <Banner type="err" message={helpfulErr} />
@@ -589,7 +634,7 @@ export default function AnimeDetail() {
             </div>
           </>
         ) : (
-          <Card className="text-center py-6 text-muted space-y-2">
+          <Card className="text-center py-6 text-muted space-y-2" data-empty-episodes>
             <p>No episodes indexed for this title.</p>
             <p className="text-xs">
               Episodes come from the Jikan seed. Run{" "}
@@ -598,6 +643,30 @@ export default function AnimeDetail() {
           </Card>
         )}
       </div>
+
+      {/* More like this — overlap computed in SQL, not guessed in the client */}
+      {similarFetch.data && similarFetch.data.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-accent">More Like This</h2>
+            <Concept>
+              get_similar_anime() — shared genres + shared studios weighted double, aggregated over
+              both bridge tables
+            </Concept>
+          </div>
+          <div className="grid-cards">
+            {similarFetch.data.map((s) => (
+              <div key={s.anime_id} className="space-y-1">
+                <AnimeCard anime={s} />
+                <p className="text-[0.65rem] text-muted text-center">
+                  {s.shared_genres} shared genre{s.shared_genres === 1 ? "" : "s"}
+                  {s.shared_studios > 0 && ` · same studio`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
