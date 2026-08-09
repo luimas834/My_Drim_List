@@ -7,17 +7,28 @@ const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-//GET /api/reviews/anime/:animeId — all reviews for an anime, newest first
+//Sort keys are interpolated, so they come from this whitelist and never from the
+//request. Each ends with review_id so ordering is total and paging is stable.
+const REVIEW_SORTS = {
+  newest: "r.created_at DESC, r.review_id DESC",
+  oldest: "r.created_at ASC, r.review_id ASC",
+  helpful: "r.helpful_count DESC, r.created_at DESC, r.review_id DESC",
+  highest: "r.score DESC NULLS LAST, r.helpful_count DESC, r.review_id DESC",
+  lowest: "r.score ASC NULLS LAST, r.helpful_count DESC, r.review_id DESC",
+};
+
+//GET /api/reviews/anime/:animeId?sort= — an anime's reviews
 router.get("/anime/:animeId", async (req, res) => {
   try {
+    const orderBy = REVIEW_SORTS[req.query.sort] || REVIEW_SORTS.helpful;
     const { rows } = await db.query(
       `SELECT r.review_id, r.user_id, r.anime_id, r.body, r.score,
               r.helpful_count, r.is_edited, r.edited_at, r.created_at,
-              u.username
+              u.username, u.profile_pic
        FROM reviews r
        JOIN users u ON u.user_id = r.user_id
        WHERE r.anime_id = $1
-       ORDER BY r.created_at DESC`,
+       ORDER BY ${orderBy}`,
       [req.params.animeId]
     );
     res.json(rows);

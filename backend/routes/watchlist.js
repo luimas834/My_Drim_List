@@ -7,9 +7,26 @@ const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-//GET /api/watchlist/me — get current user watchlist joined with anime card view
+//Sort keys are interpolated, so they come from this whitelist, never the request.
+const WATCHLIST_SORTS = {
+  updated: "w.updated_at DESC, w.watchlist_id DESC",
+  title: "ac.title ASC",
+  score: "w.user_score DESC NULLS LAST, ac.title",
+  progress: "w.episodes_watched DESC, ac.title",
+  added: "w.watchlist_id ASC",
+};
+
+//GET /api/watchlist/me?status=&sort= — current user's list
 router.get("/me", auth, async (req, res) => {
   try {
+    const orderBy = WATCHLIST_SORTS[req.query.sort] || WATCHLIST_SORTS.updated;
+    const params = [req.userId];
+    let statusSql = "";
+    if (req.query.status) {
+      params.push(req.query.status);
+      statusSql = `AND w.status = $${params.length}`;
+    }
+
     const { rows } = await db.query(
       `SELECT w.watchlist_id, w.user_id, w.anime_id, w.status, w.episodes_watched,
               w.user_score, w.started_at, w.finished_at, w.updated_at,
@@ -17,9 +34,9 @@ router.get("/me", auth, async (req, res) => {
               ac.status AS anime_status, ac.genres, ac.studios
        FROM watchlist w
        JOIN anime_card_view ac ON ac.anime_id = w.anime_id
-       WHERE w.user_id = $1
-       ORDER BY w.updated_at DESC`,
-      [req.userId]
+       WHERE w.user_id = $1 ${statusSql}
+       ORDER BY ${orderBy}`,
+      params
     );
     res.json(rows);
   } catch (e) {
