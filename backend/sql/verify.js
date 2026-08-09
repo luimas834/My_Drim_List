@@ -18,9 +18,10 @@ const EXPECTED = {
   functions: [
     "get_user_stats", "recommend_anime", "get_watch_history", "get_recent_discussions",
     "get_anime_discussion_stats", "get_top_studios", "get_studio_anime",
+    "search_anime", "get_similar_anime", "get_score_distribution", "get_catalogue_years",
   ],
   procedures: ["cast_helpful_vote", "bulk_drop_inactive"],
-  views: ["anime_card_view", "episode_card_view", "studio_card_view"],
+  views: ["anime_card_view", "episode_card_view", "studio_card_view", "anime_browse_view"],
   matviews: ["top_by_genre"],
 };
 

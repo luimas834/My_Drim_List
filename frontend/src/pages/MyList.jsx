@@ -4,7 +4,14 @@ import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { Card, Tag, Btn, Banner, Concept, Loading } from "../ui";
 
 export default function MyList() {
-  const watchlistFetch = useFetch(() => Api.watchlist());
+  // Filtering and sorting happen in SQL, not by filtering the array here — the
+  // whole list is not fetched just to hide most of it.
+  const [status, setStatus] = React.useState("");
+  const [sort, setSort] = React.useState("updated");
+  const watchlistFetch = useFetch(
+    () => Api.watchlist({ status: status || undefined, sort }),
+    [status, sort]
+  );
   const activityFetch = useFetch(() => Api.activity(30));
   const notifFetch = useFetch(() => Api.notifications());
 
@@ -74,10 +81,45 @@ export default function MyList() {
 
       {/* 1. Watchlist Section */}
       <section className="space-y-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-xl font-bold text-text">Watchlist</h2>
-          <Concept>ON DELETE CASCADE + trg_review_cleanup fires on remove</Concept>
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <h2 className="text-xl font-bold text-text">
+            Watchlist
+            {watchlistFetch.data && (
+              <span className="text-sm font-normal text-muted ml-2">
+                ({watchlistFetch.data.length})
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-2">
+            <select
+              className="bg-surface border border-line rounded px-2 py-1 text-text text-xs outline-none focus:border-accent"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option value="watching">Watching</option>
+              <option value="completed">Completed</option>
+              <option value="on-hold">On hold</option>
+              <option value="dropped">Dropped</option>
+              <option value="plan-to-watch">Plan to watch</option>
+            </select>
+            <select
+              className="bg-surface border border-line rounded px-2 py-1 text-text text-xs outline-none focus:border-accent"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
+              <option value="updated">Recently updated</option>
+              <option value="title">Title A-Z</option>
+              <option value="score">My score</option>
+              <option value="progress">Progress</option>
+              <option value="added">Date added</option>
+            </select>
+          </div>
         </div>
+        <Concept>
+          Status and sort go into the WHERE and ORDER BY, so the server returns only what is shown —
+          ON DELETE CASCADE + trg_review_cleanup still fire on remove
+        </Concept>
 
         <Banner type="err" message={wlErr} />
 

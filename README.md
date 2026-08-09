@@ -58,13 +58,17 @@ Every command runs from the repo root.
 
 | Command | What it does |
 |---|---|
-| `npm run db:setup` | Applies every numbered `.sql` file in `backend/sql/` in order. **Destructive** — `01_schema.sql` starts with `DROP TABLE ... CASCADE`. |
-| `npm run db:reset` | Same thing. Named for when you mean it. |
+| `npm run db:setup` | Builds a new database, or applies newer migrations to an existing one. **Safe** — skips the destructive `01_schema.sql` if a catalogue is already there. Run it after every `git pull`. |
+| `npm run db:reset -- --all` | Full rebuild. **Destructive** — `01_schema.sql` drops every table. |
 | `npm run db:restore` | Loads the committed catalogue dump. Offline, seconds. **Use this on a new machine.** |
 | `npm run db:seed` | Fetches fresh data from Jikan. Needs internet, takes a few minutes. |
 | `npm run db:dump` | Exports the catalogue to `backend/sql/data/seed_data.sql` so teammates can restore it. Needs `pg_dump`. |
 | `npm run db:verify` | Checks every table, function, procedure, view, matview and trigger exists, plus data counts and demo readiness. |
 | `npm run db:make-admin -- <email>` | Grants a registered user the `is_admin` flag. |
+| `npm run db:seed:anilist` | Seeds from AniList instead of Jikan — a second source for when one is down. |
+| `npm run db:sql -- "<SQL>"` | Runs SQL using the app's own `DATABASE_URL`. Avoids `psql`'s "role does not exist". `--q=users` lists canned queries. |
+
+`db:setup` also accepts `--only=07`, `--from=06` and `--dry-run`.
 
 **Setting up on a second machine** used to mean five `psql` invocations plus a multi-minute seed.
 Now it's `createdb mdl && npm run setup`. The setup script uses the `pg` driver rather than shelling
@@ -99,7 +103,7 @@ The trade-off: posters need internet to display. Every piece of *data* still wor
 ### 1. Schema and seeding
 * **14 tables** — `users`, `anime`, `genres`, `anime_genres`, `studios`, `anime_studios`, `episodes`, `watchlist`, `reviews`, `review_votes`, `episode_discussions`, `followers`, `activity_log`, `notifications`.
 * Third normal form, with two deliberate derived columns (`anime.score`, `reviews.helpful_count`) kept correct by triggers.
-* **7 indexes** on the foreign keys and filter columns that queries actually use.
+* **13 indexes** on the foreign keys, filter and sort columns queries actually use, including a GIN index on the search vector.
 * `anime.mal_score` preserves the seeded rating as a fallback, so removing the last review doesn't blank a title's score.
 
 ### 2. Authentication
@@ -108,7 +112,11 @@ The trade-off: posters need internet to display. Every piece of *data* still wor
 * `adminMiddleware` re-reads `is_admin` from the database on every request rather than trusting a token claim, so a revoked role takes effect immediately instead of when the token expires.
 
 ### 3. Catalogue and discovery
-* Paginated browse with title search (`ILIKE`) and **exact, indexed genre filtering** via an `EXISTS` against the bridge table.
+* **Full-text search** over titles and synopses — a `tsvector` column maintained by `trg_anime_search`, GIN-indexed, `setweight`ed so title hits outrank synopsis hits, queried with `websearch_to_tsquery`.
+* Filter by genre, studio, year and airing status; sort by rating, popularity, release date, title, episode count or review count. Genre and studio filters are exact, indexed `EXISTS` checks against the bridge tables.
+* Pagination totals come from `COUNT(*) OVER()` in the same statement — one round trip, one consistent snapshot.
+* `get_similar_anime()` ranks "more like this" by shared genres plus shared studios weighted double.
+* `get_score_distribution()` builds a ten-bucket histogram with `generate_series`.
 * `GET /api/anime/genres` for filter dropdowns, with per-genre counts.
 * Trending: 5-table `LEFT JOIN` with a 7-day activity window.
 * `top_by_genre` materialized view, ranked with `RANK() OVER (PARTITION BY ...)`.
@@ -155,9 +163,11 @@ The trade-off: posters need internet to display. Every piece of *data* still wor
 | [04_procedures.sql](backend/sql/04_procedures.sql) | `cast_helpful_vote`, `bulk_drop_inactive` |
 | [05_views.sql](backend/sql/05_views.sql) | `anime_card_view`, `top_by_genre` (materialized) |
 | [06_discussions.sql](backend/sql/06_discussions.sql) | Discussion edit flag, reply notifications, `episode_card_view`, `get_recent_discussions`, `get_anime_discussion_stats` |
+| [07_studios.sql](backend/sql/07_studios.sql) | `studio_card_view`, `get_top_studios` (RANK), `get_studio_anime` |
+| [08_discovery.sql](backend/sql/08_discovery.sql) | Full-text search vector + GIN, `search_anime`, `anime_browse_view`, `get_similar_anime`, `get_score_distribution`, `get_catalogue_years` |
 | [seed.js](backend/sql/seed.js) | Jikan import — idempotent, resumable, paginated |
 
-**Totals:** 14 tables · 13 triggers · 5 PL/pgSQL functions · 2 procedures · 2 views · 1 materialized view · 7 indexes.
+**Totals:** 14 tables · 14 triggers · 11 PL/pgSQL functions · 2 procedures · 4 views · 1 materialized view · 13 indexes.
 
 ---
 
@@ -232,6 +242,8 @@ Throughout the UI, inline `Concept` labels name the exact database object behind
 - [x] Recommendations, stats, keyset history
 - [x] Admin-guarded maintenance procedures
 - [x] One-command database setup, dump/restore, verification
-- [ ] Full-text search (`tsvector` + GIN)
+- [x] Full-text search (`tsvector` + GIN)
+- [x] Sorting, year/status/studio filtering, similar-anime, score histograms
+- [x] User directory, profile editing, public watchlists
 - [ ] Scheduled matview refresh (`pg_cron`)
 - [ ] Row-level security

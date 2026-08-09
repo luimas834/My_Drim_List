@@ -3,21 +3,54 @@
 // IMPORTANT: /trending and /top are declared BEFORE /:id so they aren't captured by it.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 
 const router = express.Router();
 
-// GET /api/anime?page=&q=&genre=  -> paginated cards from anime_card_view
+// Sort keys are interpolated into the SQL, so they can never come from user
+// input directly — this whitelist is the only way a sort clause is produced.
+// Every option ends with anime_id to keep paging stable when values tie.
+const SORTS = {
+  score: "acv.score DESC NULLS LAST, acv.anime_id",
+  popularity: "acv.member_count DESC, acv.score DESC NULLS LAST, acv.anime_id",
+  newest: "acv.aired_from DESC NULLS LAST, acv.anime_id",
+  oldest: "acv.aired_from ASC NULLS LAST, acv.anime_id",
+  title: "acv.title ASC, acv.anime_id",
+  episodes: "acv.episode_count DESC NULLS LAST, acv.anime_id",
+  reviews: "acv.review_count DESC, acv.score DESC NULLS LAST, acv.anime_id",
+};
+
+// GET /api/anime?page=&q=&genre=&studio=&year=&status=&sort=
 router.get("/", async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
-    const limit = 20;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
     const offset = (page - 1) * limit;
+    const orderBy = SORTS[req.query.sort] || SORTS.score;
 
     const params = [];
     const where = [];
     if (req.query.q) {
-      params.push(`%${req.query.q}%`);
-      where.push(`acv.title ILIKE $${params.length}`);
+      // Two index types for two query shapes, OR'd together:
+      //   - the GIN tsvector handles whole words, stemming and synopsis text,
+      //     so "attack titan" finds Attack on Titan
+      //   - the GIN trigram index on title handles partial input, so "narut"
+      //     matches while the user is still typing. Full-text alone cannot:
+      //     "narut" is not a word, so it stems to nothing and matches nothing
+      params.push(req.query.q);
+      where.push(`acv.anime_id IN (
+        SELECT a2.anime_id FROM anime a2
+        WHERE a2.search_vector @@ websearch_to_tsquery('english', $${params.length})
+           OR a2.title ILIKE '%' || $${params.length} || '%'
+      )`);
+    }
+    if (req.query.year) {
+      params.push(parseInt(req.query.year, 10));
+      where.push(`acv.year = $${params.length}`);
+    }
+    if (req.query.status) {
+      params.push(req.query.status);
+      where.push(`acv.status = $${params.length}`);
     }
     if (req.query.studio) {
       // Same EXISTS-against-the-bridge pattern as the genre filter, using
@@ -58,16 +91,15 @@ router.get("/", async (req, res) => {
     // writes. The cost is the same scan the filter already needed.
     const { rows } = await db.query(
       `SELECT acv.*, COUNT(*) OVER() AS total_count
-       FROM anime_card_view acv
+       FROM anime_browse_view acv
        ${whereSql}
-       ORDER BY acv.score DESC NULLS LAST, acv.anime_id
+       ORDER BY ${orderBy}
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -87,8 +119,59 @@ router.get("/genres", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/search?q=&limit=  -> ranked full-text search, for the search box
+router.get("/search", async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim();
+    if (!q) return res.json([]);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 30);
+    const { rows } = await db.query("SELECT * FROM search_anime($1, $2)", [q, limit]);
+    res.json(rows);
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/random -> one random anime, for the "surprise me" button.
+// TABLESAMPLE is faster but approximate and can return nothing on a small
+// table; at this catalogue size ORDER BY random() is honest and instant.
+router.get("/random", async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT anime_id FROM anime WHERE score IS NOT NULL ORDER BY random() LIMIT 1`
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Catalogue is empty" });
+    res.json(rows[0]);
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/years -> release years with counts, for the filter dropdown
+router.get("/years", async (req, res) => {
+  try {
+    const { rows } = await db.query("SELECT * FROM get_catalogue_years()");
+    res.json(rows);
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/statuses -> distinct airing statuses present in the catalogue
+router.get("/statuses", async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT status, COUNT(*)::INT AS anime_count
+       FROM anime WHERE status IS NOT NULL
+       GROUP BY status ORDER BY anime_count DESC`
+    );
+    res.json(rows);
+  } catch (e) {
+    return fail(res, e);
   }
 });
 
@@ -103,8 +186,7 @@ router.get("/studios", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -116,8 +198,7 @@ router.get("/studios/top", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_top_studios($1, $2)", [limit, min]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -135,8 +216,7 @@ router.get("/studios/:studioId", async (req, res) => {
     if (!studioQ.rows[0]) return res.status(404).json({ error: "Studio not found" });
     res.json({ ...studioQ.rows[0], anime: animeQ.rows });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -157,8 +237,7 @@ router.get("/trending", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -180,8 +259,32 @@ router.get("/top", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/:id/similar?limit= -> "more like this", by genre/studio overlap
+router.get("/:id/similar", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 8, 24);
+    const { rows } = await db.query("SELECT * FROM get_similar_anime($1, $2)", [id, limit]);
+    res.json(rows);
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+// GET /api/anime/:id/score-distribution -> ten buckets, always all ten
+router.get("/:id/score-distribution", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const { rows } = await db.query("SELECT * FROM get_score_distribution($1)", [id]);
+    res.json(rows);
+  } catch (e) {
+    return fail(res, e);
   }
 });
 
@@ -231,8 +334,7 @@ router.get("/:id", async (req, res) => {
       },
     });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

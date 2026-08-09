@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
-import { Card, Tag, Btn, Banner, Concept, Loading, Stat } from "../ui";
+import { Card, Tag, Btn, Banner, Concept, Loading, Stat, AnimeCard } from "../ui";
+import { Avatar } from "./Users";
 
 export default function Profile() {
   const { id } = useParams();
   const userId = parseInt(id, 10);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, setUser } = useAuth();
 
   const userFetch = useFetch(() => Api.user(userId), [userId]);
   const statsFetch = useFetch(() => Api.stats(userId), [userId]);
@@ -27,6 +28,43 @@ export default function Profile() {
 
   // Recommendations state (own profile only)
   const recsFetch = useFetch(() => (isMe ? Api.recommendations() : Promise.resolve(null)), [isMe]);
+
+  // Anyone's watchlist is public — a tracker where you cannot see what other
+  // people are watching is missing the point.
+  const [listStatus, setListStatus] = useState("");
+  const listFetch = useFetch(
+    () => Api.userWatchlist(userId, listStatus || undefined),
+    [userId, listStatus]
+  );
+
+  // Profile editing. bio and profile_pic were columns with no way to set them.
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [formBio, setFormBio] = useState("");
+  const [formPic, setFormPic] = useState("");
+  const [profileErr, setProfileErr] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const openProfileEditor = () => {
+    setFormBio(userFetch.data?.bio || "");
+    setFormPic(userFetch.data?.profile_pic || "");
+    setProfileErr(null);
+    setEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    setProfileSaving(true);
+    setProfileErr(null);
+    try {
+      const updated = await Api.updateProfile({ bio: formBio, profile_pic: formPic });
+      setUser(updated); // keep the navbar and auth context in step
+      setEditingProfile(false);
+      userFetch.reload();
+    } catch (e) {
+      setProfileErr(errMsg(e));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   // Follower / following lists, fetched only when a count is clicked
   const [socialTab, setSocialTab] = useState(null); // "followers" | "following" | null
@@ -123,9 +161,7 @@ export default function Profile() {
       <Card className="space-y-4 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-accent/20 border-2 border-accent text-accent rounded-full flex items-center justify-center font-bold text-2xl uppercase">
-              {profile.username?.substring(0, 2)}
-            </div>
+            <Avatar user={profile} size="w-16 h-16 text-2xl" />
             <div>
               <h1 className="text-2xl font-bold text-text">{profile.username}</h1>
               <p className="text-xs text-muted">Joined {profile.created_at?.substring(0, 10)}</p>
@@ -164,10 +200,55 @@ export default function Profile() {
                 </Btn>
               </div>
             )}
+
+            {isMe && !editingProfile && (
+              <Btn variant="ghost" onClick={openProfileEditor}>
+                Edit profile
+              </Btn>
+            )}
           </div>
         </div>
 
         {followErr && <Banner type="err" message={followErr} />}
+
+        {isMe && editingProfile && (
+          <div className="pt-3 border-t border-line space-y-3">
+            <Banner type="err" message={profileErr} />
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase mb-1">
+                Avatar image URL
+              </label>
+              <input
+                type="url"
+                placeholder="https://..."
+                className="w-full bg-bg border border-line rounded px-3 py-2 text-text text-sm focus:border-accent outline-none"
+                value={formPic}
+                onChange={(e) => setFormPic(e.target.value)}
+              />
+              <p className="text-xs text-muted mt-1">
+                A URL, not an upload — the same reasoning as anime covers. See the README.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase mb-1">Bio</label>
+              <textarea
+                rows="3"
+                placeholder="Tell people what you watch..."
+                className="w-full bg-bg border border-line rounded p-3 text-text text-sm focus:border-accent outline-none"
+                value={formBio}
+                onChange={(e) => setFormBio(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Btn onClick={saveProfile} disabled={profileSaving}>
+                {profileSaving ? "Saving..." : "Save"}
+              </Btn>
+              <Btn variant="ghost" onClick={() => setEditingProfile(false)}>
+                Cancel
+              </Btn>
+            </div>
+          </div>
+        )}
 
         {socialTab && (
           <div className="pt-3 border-t border-line space-y-2">
@@ -220,6 +301,52 @@ export default function Profile() {
         )}
         <Banner type="err" message={selfFollowErr} />
       </Card>
+
+      {/* Public watchlist — the whole point of a tracker is seeing other lists */}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <h2 className="text-xl font-bold text-text">
+            {isMe ? "My List" : `${profile.username}'s List`}
+          </h2>
+          <div className="flex items-center gap-2">
+            <select
+              className="bg-surface border border-line rounded px-2 py-1 text-text text-xs outline-none focus:border-accent"
+              value={listStatus}
+              onChange={(e) => setListStatus(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option value="watching">Watching</option>
+              <option value="completed">Completed</option>
+              <option value="on-hold">On hold</option>
+              <option value="dropped">Dropped</option>
+              <option value="plan-to-watch">Plan to watch</option>
+            </select>
+            <Concept>watchlist ⋈ anime_card_view, filtered in the WHERE clause</Concept>
+          </div>
+        </div>
+
+        {listFetch.loading ? (
+          <Loading text="Loading list..." />
+        ) : listFetch.data && listFetch.data.length > 0 ? (
+          <div className="grid-cards">
+            {listFetch.data.slice(0, 18).map((w) => (
+              <div key={w.watchlist_id} className="space-y-1">
+                <AnimeCard anime={{ ...w, score: w.anime_score }} />
+                <p className="text-[0.65rem] text-center text-muted">
+                  <span className="text-accent font-semibold">{w.status}</span>
+                  {w.episodes_watched > 0 &&
+                    ` · ${w.episodes_watched}/${w.episode_count || "?"}`}
+                  {w.user_score != null && ` · ★${w.user_score}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Card className="text-center py-8 text-muted">
+            {listStatus ? `Nothing marked "${listStatus}".` : "This list is empty."}
+          </Card>
+        )}
+      </section>
 
       {/* 6 Stat Tiles Section */}
       <section className="space-y-3">

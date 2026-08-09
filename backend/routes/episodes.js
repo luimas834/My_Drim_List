@@ -4,6 +4,7 @@
 //enforced in the SQL WHERE clause, not with a "is this mine?" pre-check.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -16,8 +17,7 @@ router.get("/recent-discussions", async (req, res) => {
     const { rows } = await db.query("SELECT * FROM get_recent_discussions($1)", [limit]);
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -45,8 +45,7 @@ router.patch("/discussions/:discussionId", auth, async (req, res) => {
     res.json(rows[0]);
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -64,8 +63,7 @@ router.delete("/discussions/:discussionId", auth, async (req, res) => {
 
     res.json({ message: "Deleted successfully", discussion: rows[0] });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -87,8 +85,7 @@ router.get("/:episodeId/discussions", async (req, res) => {
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -123,8 +120,7 @@ router.post("/:episodeId/discussions", auth, async (req, res) => {
     //the FK to episodes is what tells us the episode does not exist
     if (e.code === "23503") return res.status(404).json({ error: "Episode not found" });
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 

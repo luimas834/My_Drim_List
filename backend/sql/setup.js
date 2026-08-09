@@ -4,18 +4,24 @@
 // `pg` driver rather than shelling out to psql, so a machine only needs Node and
 // a reachable PostgreSQL — no psql client install, no per-OS path differences.
 //
-//   node sql/setup.js              run every migration in order
+//   node sql/setup.js              safe: build a new database, or update an existing one
+//   node sql/setup.js --all        force, INCLUDING the destructive 01_schema.sql
 //   node sql/setup.js --dry-run    list what would run, touch nothing
-//   node sql/setup.js --from=06    skip 01-05, keep your data
+//   node sql/setup.js --from=06    start from a given migration
 //   node sql/setup.js --only=07    run one file only
 //
-// 01_schema.sql begins with DROP TABLE ... CASCADE, so a full run is destructive
-// by design: it is both "set up" and "reset". Everything after it is written
-// with CREATE OR REPLACE / IF NOT EXISTS, so re-running those is safe.
+// 01_schema.sql begins with DROP TABLE ... CASCADE. Every other migration is
+// written with CREATE OR REPLACE / IF NOT EXISTS, so re-running those is safe.
 //
-// --from and --only exist for exactly that reason: when a later migration adds
-// views or functions and you do not want to lose the catalogue and the accounts
-// you have already set up, apply just the new file.
+// So the default adapts: if the database is empty, run everything. If it already
+// has an `anime` table, skip 01 and apply the rest. That means `db:setup` is the
+// single command for both "set this up" and "I pulled and there are new
+// migrations", and it can never silently destroy a seeded catalogue. Use --all
+// when you actually want a clean rebuild.
+//
+// This exists because adding 07 and 08 both required remembering to run
+// --only=NN by hand, and forgetting produced a runtime "relation does not
+// exist" on a page that had been working.
 const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
@@ -31,6 +37,7 @@ function flag(name) {
 
 const FROM = flag("from");
 const ONLY = flag("only");
+const ALL = process.argv.includes("--all") || process.argv.includes("--force");
 
 // Numbered files run in filename order. seed.js is JS, not SQL, and runs separately.
 function migrationFiles() {
@@ -47,8 +54,16 @@ function migrationFiles() {
   return files;
 }
 
+// Is there already a schema here worth protecting?
+async function schemaExists(client) {
+  const { rows } = await client.query(
+    `SELECT to_regclass('public.anime') IS NOT NULL AS present`
+  );
+  return rows[0].present;
+}
+
 async function main() {
-  const files = migrationFiles();
+  let files = migrationFiles();
 
   if (!files.length) {
     console.error(
@@ -59,21 +74,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Found ${files.length} migration(s):`);
-  files.forEach((f) => console.log(`  - ${f}`));
-
-  if (files.some((f) => f.startsWith("01"))) {
-    console.log("\n⚠  01_schema.sql drops every table — all existing data will be lost.");
-    console.log("   To apply only newer migrations instead: --from=06 or --only=07");
-  }
-
-  if (DRY_RUN) {
-    console.log("\n--dry-run: nothing was executed.");
-    return;
-  }
-
   if (!process.env.DATABASE_URL) {
-    console.error("\nDATABASE_URL is not set. Create backend/.env first (see .env.example).");
+    console.error("DATABASE_URL is not set. Create backend/.env first (see .env.example).");
     process.exit(1);
   }
 
@@ -81,7 +83,39 @@ async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
-  console.log(`\nConnected. Applying migrations...\n`);
+  // Protect an existing catalogue unless a rebuild was explicitly asked for.
+  const existing = await schemaExists(client);
+  let skippedSchema = false;
+  if (existing && !ALL && !ONLY && !FROM) {
+    const before = files.length;
+    files = files.filter((f) => !f.startsWith("01"));
+    skippedSchema = files.length < before;
+  }
+
+  console.log(`Found ${files.length} migration(s) to apply:`);
+  files.forEach((f) => console.log(`  - ${f}`));
+
+  if (skippedSchema) {
+    console.log(
+      "\n  (existing database detected — 01_schema.sql skipped so your data survives.\n" +
+        "   Everything else is CREATE OR REPLACE / IF NOT EXISTS, so this is safe to re-run.\n" +
+        "   Use --all if you want a clean rebuild, which DROPS every table.)"
+    );
+  } else if (files.some((f) => f.startsWith("01"))) {
+    console.log(
+      existing
+        ? "\n⚠  01_schema.sql DROPS every table — all existing data will be lost."
+        : "\n  (empty database — building the schema from scratch.)"
+    );
+  }
+
+  if (DRY_RUN) {
+    console.log("\n--dry-run: nothing was executed.");
+    await client.end();
+    return;
+  }
+
+  console.log(`\nApplying...\n`);
 
   for (const file of files) {
     const sql = fs.readFileSync(path.join(SQL_DIR, file), "utf8");
@@ -93,6 +127,19 @@ async function main() {
       console.log("FAILED");
       console.error(`\n${file} failed:\n  ${e.message}`);
       if (e.position) console.error(`  at character ${e.position}`);
+      if (e.hint) console.error(`  hint: ${e.hint}`);
+
+      // Say plainly what did not run. Stopping at the first failure is correct —
+      // later migrations may depend on this one — but silently leaving the rest
+      // unapplied is how you end up with a half-migrated database and a
+      // confusing "relation does not exist" at runtime.
+      const remaining = files.slice(files.indexOf(file) + 1);
+      if (remaining.length) {
+        console.error(`\n  NOT applied because of this failure:`);
+        remaining.forEach((f) => console.error(`    - ${f}`));
+        console.error(`\n  Fix the error above, then run db:setup again.`);
+      }
+
       await client.end();
       process.exit(1);
     }

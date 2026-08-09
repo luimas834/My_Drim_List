@@ -3,13 +3,31 @@
 //database triggers automatically update completion status, finished_at date, and activity_log.
 const express = require("express");
 const db = require("../db");
+const fail = require("../lib/fail");
 const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-//GET /api/watchlist/me — get current user watchlist joined with anime card view
+//Sort keys are interpolated, so they come from this whitelist, never the request.
+const WATCHLIST_SORTS = {
+  updated: "w.updated_at DESC, w.watchlist_id DESC",
+  title: "ac.title ASC",
+  score: "w.user_score DESC NULLS LAST, ac.title",
+  progress: "w.episodes_watched DESC, ac.title",
+  added: "w.watchlist_id ASC",
+};
+
+//GET /api/watchlist/me?status=&sort= — current user's list
 router.get("/me", auth, async (req, res) => {
   try {
+    const orderBy = WATCHLIST_SORTS[req.query.sort] || WATCHLIST_SORTS.updated;
+    const params = [req.userId];
+    let statusSql = "";
+    if (req.query.status) {
+      params.push(req.query.status);
+      statusSql = `AND w.status = $${params.length}`;
+    }
+
     const { rows } = await db.query(
       `SELECT w.watchlist_id, w.user_id, w.anime_id, w.status, w.episodes_watched,
               w.user_score, w.started_at, w.finished_at, w.updated_at,
@@ -17,14 +35,13 @@ router.get("/me", auth, async (req, res) => {
               ac.status AS anime_status, ac.genres, ac.studios
        FROM watchlist w
        JOIN anime_card_view ac ON ac.anime_id = w.anime_id
-       WHERE w.user_id = $1
-       ORDER BY w.updated_at DESC`,
-      [req.userId]
+       WHERE w.user_id = $1 ${statusSql}
+       ORDER BY ${orderBy}`,
+      params
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -47,8 +64,7 @@ router.post("/", auth, async (req, res) => {
     if (e.code === "23514") return res.status(400).json({ error: "Invalid status value" });
     if (e.code === "23503") return res.status(404).json({ error: "Anime not found" });
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -94,8 +110,7 @@ router.patch("/:animeId", auth, async (req, res) => {
   } catch (e) {
     if (e.code === "23514") return res.status(400).json({ error: "Invalid status, score, or episode count" });
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
@@ -117,8 +132,7 @@ router.delete("/:animeId", auth, async (req, res) => {
     res.json({ message: "Deleted successfully", watchlist: rows[0] });
   } catch (e) {
     if (e.message?.includes(":")) return res.status(400).json({ error: e.message });
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    return fail(res, e);
   }
 });
 
