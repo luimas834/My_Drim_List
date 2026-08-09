@@ -9,6 +9,7 @@ import Browse from "./pages/Browse";
 import AnimeDetail from "./pages/AnimeDetail";
 import MyList from "./pages/MyList";
 import Profile from "./pages/Profile";
+import Users from "./pages/Users";
 import Demo from "./pages/Demo";
 import { Login, Register } from "./pages/Auth";
 
@@ -55,6 +56,9 @@ export default function App() {
               </Link>
               <Link to="/browse" className="hover:text-accent transition-colors">
                 Browse
+              </Link>
+              <Link to="/users" className="hover:text-accent transition-colors">
+                Members
               </Link>
               {user && (
                 <Link to="/my-list" className="hover:text-accent transition-colors flex items-center gap-1.5">
@@ -120,6 +124,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/users" element={<Users />} />
           <Route path="/profile/:id" element={<Profile />} />
           <Route path="/demo" element={<Demo />} />
           <Route path="/login" element={<Login />} />
