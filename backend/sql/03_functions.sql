@@ -15,38 +15,75 @@ END; $$ LANGUAGE plpgsql;
 
 -- ========== B. RECOMMENDATIONS (explicit CURSOR + temp table) ==========
 CREATE OR REPLACE FUNCTION recommend_anime(p_user_id INT)
-RETURNS TABLE(anime_id INT, title TEXT, genre_match_count INT) AS $$
+RETURNS TABLE(
+    anime_id INT,
+    title TEXT,
+    cover_image TEXT,
+    genre_match_count INT
+) AS $$
 DECLARE
     v_genre INT;
+
     genre_cursor CURSOR FOR
         SELECT DISTINCT ag.genre_id
         FROM watchlist w
-        JOIN anime_genres ag ON ag.anime_id = w.anime_id
-        WHERE w.user_id = p_user_id AND w.status = 'completed';
+        JOIN anime_genres ag
+            ON ag.anime_id = w.anime_id
+        WHERE w.user_id = p_user_id
+          AND w.status = 'completed';
+
 BEGIN
     CREATE TEMP TABLE IF NOT EXISTS hits(
-        anime_id INT PRIMARY KEY, title TEXT, cnt INT DEFAULT 0
+        hit_anime_id INT PRIMARY KEY,
+        hit_title TEXT,
+        cnt INT DEFAULT 0
     ) ON COMMIT DROP;
+
     TRUNCATE hits;
 
-    OPEN genre_cursor;                              -- explicit cursor
+    OPEN genre_cursor;
+
     LOOP
         FETCH genre_cursor INTO v_genre;
+
         EXIT WHEN NOT FOUND;
-        INSERT INTO hits(anime_id, title, cnt)
-        SELECT a.anime_id, a.title, 1
+
+        INSERT INTO hits(hit_anime_id, hit_title, cnt)
+        SELECT
+            a.anime_id,
+            a.title,
+            1
         FROM anime a
-        JOIN anime_genres ag ON ag.anime_id = a.anime_id
+        JOIN anime_genres ag
+            ON ag.anime_id = a.anime_id
         WHERE ag.genre_id = v_genre
-          AND a.anime_id NOT IN (SELECT anime_id FROM watchlist WHERE user_id = p_user_id)
-        ON CONFLICT (anime_id) DO UPDATE SET cnt = hits.cnt + 1;  -- more overlap = higher rank
+          AND NOT EXISTS (
+              SELECT 1
+              FROM watchlist w
+              WHERE w.user_id = p_user_id
+                AND w.anime_id = a.anime_id
+          )
+        ON CONFLICT (hit_anime_id)
+        DO UPDATE SET cnt = hits.cnt + 1;
+
     END LOOP;
+
     CLOSE genre_cursor;
 
     RETURN QUERY
-        SELECT h.anime_id, h.title::TEXT, h.cnt
-        FROM hits h ORDER BY h.cnt DESC LIMIT 10;
-END; $$ LANGUAGE plpgsql;
+        SELECT
+            h.hit_anime_id,
+            h.hit_title::TEXT,
+            a.cover_image::TEXT,
+            h.cnt
+        FROM hits h
+        JOIN anime a
+            ON a.anime_id = h.hit_anime_id
+        ORDER BY h.cnt DESC
+        LIMIT 10;
+
+END;
+$$ LANGUAGE plpgsql;
 
 -- ========== C. WATCH HISTORY (keyset / cursor-style pagination) ==========
 CREATE OR REPLACE FUNCTION get_watch_history(
