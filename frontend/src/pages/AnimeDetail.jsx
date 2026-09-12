@@ -111,6 +111,22 @@ export default function AnimeDetail() {
     }
   };
 
+  const handleWatchFinalEpisode = async () => {
+    if (!anime.episode_count) return;
+    setWlErr(null);
+    setWlMsg(null);
+    setWlSubmitting(true);
+    try {
+      await Api.patchWatchlist(animeId, { episodes_watched: anime.episode_count });
+      setWlMsg(`Finished final episode (${anime.episode_count}/${anime.episode_count})!`);
+      watchlistFetch.reload();
+    } catch (err) {
+      setWlErr(errMsg(err));
+    } finally {
+      setWlSubmitting(false);
+    }
+  };
+
   // Review submission handler.
   const handlePostReview = async () => {
     setReviewErr(null);
@@ -330,6 +346,15 @@ export default function AnimeDetail() {
               </div>
             </div>
           </div>
+
+          {anime.episode_count && (
+            <div className="pt-2 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-2">
+              <span className="text-xs text-muted">Jump to end of series:</span>
+              <Btn onClick={handleWatchFinalEpisode} disabled={wlSubmitting}>
+                ⚡ Watch final episode ({anime.episode_count}/{anime.episode_count})
+              </Btn>
+            </div>
+          )}
 
           {myWatchlistEntry && (
             <div className="text-xs text-muted space-x-3 pt-1">
