@@ -2,15 +2,7 @@ import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
-import {
-  Card,
-  Tag,
-  Btn,
-  Banner,
-  Loading,
-  Stat,
-  AnimeCard,
-} from "../ui";
+import { Card, Tag, Btn, Banner, Loading, Stat, AnimeCard } from "../ui";
 import { Avatar } from "./Users";
 
 export default function Profile() {
@@ -446,9 +438,8 @@ export default function Profile() {
                       {rec.title}
                     </Link>
 
-                    <Tag className="bg-accent/20 text-accent border border-accent/40">
-                      {rec.genre_match_count} genre match
-                      {rec.genre_match_count !== 1 ? "es" : ""}
+                    <Tag className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">
+                      ⭐ {Number(rec.rating).toFixed(2)}
                     </Tag>
                   </div>
                 </Card>
@@ -456,7 +447,8 @@ export default function Profile() {
             </div>
           ) : (
             <Card className="text-center py-6 text-muted text-sm">
-              Complete at least one anime first — recommendations are based on genres of your completed titles.
+              Complete at least one anime first — recommendations are based on
+              genres of your completed titles.
             </Card>
           )}
         </section>

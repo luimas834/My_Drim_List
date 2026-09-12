@@ -14,14 +14,12 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 -- ========== B. RECOMMENDATIONS (explicit CURSOR + temp table) ==========
-DROP FUNCTION IF EXISTS recommend_anime(INT);
 CREATE OR REPLACE FUNCTION recommend_anime(p_user_id INT)
 RETURNS TABLE(
     anime_id INT,
     title TEXT,
     cover_image TEXT,
-    rating NUMERIC,
-    genre_match_count INT
+    rating NUMERIC
 ) AS $$
 DECLARE
     v_genre INT;
@@ -47,10 +45,13 @@ BEGIN
 
     LOOP
         FETCH genre_cursor INTO v_genre;
-
         EXIT WHEN NOT FOUND;
 
-        INSERT INTO hits(hit_anime_id, hit_title, cnt)
+        INSERT INTO hits(
+            hit_anime_id,
+            hit_title,
+            cnt
+        )
         SELECT
             a.anime_id,
             a.title,
@@ -67,7 +68,6 @@ BEGIN
           )
         ON CONFLICT (hit_anime_id)
         DO UPDATE SET cnt = hits.cnt + 1;
-
     END LOOP;
 
     CLOSE genre_cursor;
@@ -77,8 +77,7 @@ BEGIN
             h.hit_anime_id,
             h.hit_title::TEXT,
             a.cover_image::TEXT,
-            COALESCE(a.score, a.mal_score, 0)::NUMERIC,
-            h.cnt
+            COALESCE(a.score, a.mal_score, 0)::NUMERIC
         FROM hits h
         JOIN anime a
             ON a.anime_id = h.hit_anime_id
