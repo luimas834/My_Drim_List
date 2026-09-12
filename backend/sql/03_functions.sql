@@ -20,6 +20,7 @@ RETURNS TABLE(
     anime_id INT,
     title TEXT,
     cover_image TEXT,
+    rating NUMERIC,
     genre_match_count INT
 ) AS $$
 DECLARE
@@ -76,11 +77,14 @@ BEGIN
             h.hit_anime_id,
             h.hit_title::TEXT,
             a.cover_image::TEXT,
+            COALESCE(a.score, a.mal_score, 0)::NUMERIC,
             h.cnt
         FROM hits h
         JOIN anime a
             ON a.anime_id = h.hit_anime_id
-        ORDER BY h.cnt DESC
+        ORDER BY
+            COALESCE(a.score, a.mal_score, 0) DESC,
+            h.cnt DESC
         LIMIT 10;
 
 END;
