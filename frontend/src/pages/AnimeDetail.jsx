@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Api, useFetch, fmtScore, errMsg } from "../api";
 import { useAuth } from "../auth";
-import { Card, Tag, Btn, Banner, Concept, Loading, AnimeCard } from "../ui";
+import { Card, Tag, Btn, Banner, Loading, AnimeCard } from "../ui";
 
 export default function AnimeDetail() {
   const { id } = useParams();
@@ -111,27 +111,8 @@ export default function AnimeDetail() {
     }
   };
 
-  const handleWatchFinalEpisode = async () => {
-    if (!anime.episode_count) return;
-    setWlErr(null);
-    setWlMsg(null);
-    setWlSubmitting(true);
-    try {
-      await Api.patchWatchlist(animeId, { episodes_watched: anime.episode_count });
-      setWlMsg(`Finished final episode (${anime.episode_count}/${anime.episode_count})!`);
-      watchlistFetch.reload();
-    } catch (err) {
-      setWlErr(errMsg(err));
-    } finally {
-      setWlSubmitting(false);
-    }
-  };
-
   // Review submission handler.
-  // The "Try anyway" button passes true purely to make the call site read as a
-  // deliberate guard demo — the request is identical either way, because the
-  // point is that trg_review_guard, not the client, decides.
-  const handlePostReview = async (_demoGuardBypass = false) => {
+  const handlePostReview = async () => {
     setReviewErr(null);
     setReviewMsg(null);
     setReviewSubmitting(true);
@@ -280,7 +261,6 @@ export default function AnimeDetail() {
         <Card className="space-y-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-bold text-accent">Your Watchlist Status</h2>
-            <Concept>BEFORE trigger chain — trg_a_episode_check → trg_b_finish_date</Concept>
           </div>
 
           <Banner type="ok" message={wlMsg} />
@@ -351,15 +331,6 @@ export default function AnimeDetail() {
             </div>
           </div>
 
-          {anime.episode_count && (
-            <div className="pt-2 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="text-xs text-muted">Demo helper: jump directly to final episode count</span>
-              <Btn onClick={handleWatchFinalEpisode} disabled={wlSubmitting}>
-                ⚡ Watch final episode ({anime.episode_count}/{anime.episode_count})
-              </Btn>
-            </div>
-          )}
-
           {myWatchlistEntry && (
             <div className="text-xs text-muted space-x-3 pt-1">
               <span>Finished: {myWatchlistEntry.finished_at ? myWatchlistEntry.finished_at.substring(0, 10) : "Not finished"}</span>
@@ -382,10 +353,6 @@ export default function AnimeDetail() {
         <div className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-bold text-accent">Score Distribution</h2>
-            <Concept>
-              get_score_distribution() — generate_series(1,10) LEFT JOINed to the tally, so a score
-              nobody gave still renders as an empty bar
-            </Concept>
           </div>
           <Card className="space-y-1.5 p-4">
             {distFetch.data.map((d) => (
@@ -422,7 +389,6 @@ export default function AnimeDetail() {
               <option value="highest">Highest score</option>
               <option value="lowest">Lowest score</option>
             </select>
-            <Concept>ORDER BY from a server-side whitelist — the key is interpolated</Concept>
           </div>
         </div>
 
@@ -436,8 +402,7 @@ export default function AnimeDetail() {
             {!isCompletedInWatchlist && (
               <div className="bg-amber-950/40 border border-amber-800/80 text-amber-200 text-xs p-3 rounded space-y-2">
                 <p>
-                  ⚠️ Watchlist status is currently <strong>'{myWatchlistEntry?.status || "Not on list"}'</strong>. PostgreSQL's
-                  BEFORE trigger <code>trg_review_guard</code> will reject reviews for uncompleted anime with code 400.
+                  ⚠️ You must complete this anime (mark as <strong>Completed</strong> in your watchlist) before posting a review.
                 </p>
               </div>
             )}
@@ -474,16 +439,11 @@ export default function AnimeDetail() {
 
               <div className="flex gap-3">
                 <Btn
-                  onClick={() => handlePostReview(false)}
+                  onClick={handlePostReview}
                   disabled={reviewSubmitting || !reviewBody || !isCompletedInWatchlist}
                 >
                   Post Review
                 </Btn>
-                {!isCompletedInWatchlist && (
-                  <Btn variant="ghost" onClick={() => handlePostReview(true)} disabled={reviewSubmitting || !reviewBody}>
-                    Try anyway (demo the guard)
-                  </Btn>
-                )}
               </div>
             </div>
           </Card>
@@ -554,11 +514,6 @@ export default function AnimeDetail() {
                       >
                         👍 {myVotes.includes(r.review_id) ? "Helpful ✓" : "Helpful"} ({r.helpful_count})
                       </Btn>
-                      <Concept>
-                        {myVotes.includes(r.review_id)
-                          ? "DELETE review_votes → trg_helpful_count decrements"
-                          : "CALL cast_helpful_vote → trg_helpful_count increments"}
-                      </Concept>
                     </div>
 
                     {isMine && !isEditing && (
@@ -603,10 +558,6 @@ export default function AnimeDetail() {
             </span>
           )}
         </div>
-        <Concept>
-          episode_card_view supplies each episode's comment_count in one query; totals come from
-          get_anime_discussion_stats()
-        </Concept>
 
         {anime.episodes && anime.episodes.length > 0 ? (
           <>
@@ -649,10 +600,6 @@ export default function AnimeDetail() {
         <div className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-bold text-accent">More Like This</h2>
-            <Concept>
-              get_similar_anime() — shared genres + shared studios weighted double, aggregated over
-              both bridge tables
-            </Concept>
           </div>
           <div className="grid-cards">
             {similarFetch.data.map((s) => (
@@ -841,24 +788,18 @@ function EpisodeAccordion({ episode, isExpanded, onToggle, user, onCountChange }
           )}
 
           {user ? (
-            <>
-              <form onSubmit={handlePostComment} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Write a comment..."
-                  className="flex-1 bg-bg border border-line rounded px-3 py-1.5 text-xs text-text focus:border-accent outline-none"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                />
-                <Btn type="submit" disabled={submitting || !comment.trim()} className="py-1 text-xs">
-                  Post
-                </Btn>
-              </form>
-              <Concept>
-                Posting fires trg_notify_discussion — everyone already in this thread gets a
-                notification. Editing fires trg_discussion_edit_flag (WHEN the text actually changed).
-              </Concept>
-            </>
+            <form onSubmit={handlePostComment} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Write a comment..."
+                className="flex-1 bg-bg border border-line rounded px-3 py-1.5 text-xs text-text focus:border-accent outline-none"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+              <Btn type="submit" disabled={submitting || !comment.trim()} className="py-1 text-xs">
+                Post
+              </Btn>
+            </form>
           ) : (
             <p className="text-xs text-muted italic">
               <Link to="/login" className="text-accent underline">
