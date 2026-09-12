@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Api, useFetch } from "../api";
-import { Card, Btn, Banner, Concept, Loading } from "../ui";
+import { Card, Btn, Banner, Loading } from "../ui";
 
 // Values must match USER_SORTS in routes/users.js.
 const SORTS = [
@@ -37,10 +37,6 @@ export default function Users() {
     <div className="space-y-6 py-6">
       <div>
         <h1 className="text-2xl font-bold text-accent">Members</h1>
-        <Concept>
-          Stats come from a LATERAL join on get_user_stats() — the PL/pgSQL function runs once per
-          row instead of the aggregation being rewritten here
-        </Concept>
       </div>
 
       <div className="flex flex-wrap gap-3">

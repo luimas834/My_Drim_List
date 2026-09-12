@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Api, useFetch, errMsg } from "../api";
-import { AnimeCard, Loading, Banner, Concept, Btn } from "../ui";
+import { AnimeCard, Loading, Banner, Btn } from "../ui";
 
 // Labels are ours; the values must match the SORTS whitelist in routes/anime.js.
 const SORT_OPTIONS = [
@@ -99,9 +99,6 @@ export default function Browse() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-accent">Browse Catalog</h1>
-          <Concept>
-            anime_browse_view + COUNT(*) OVER() for the total; q is a GIN-indexed full-text match
-          </Concept>
         </div>
         <Btn variant="ghost" onClick={surpriseMe}>
           🎲 Surprise me

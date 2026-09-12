@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Api, errMsg } from "../api";
 import { useAuth } from "../auth";
-import { Card, Btn, Banner, Concept } from "../ui";
+import { Card, Btn, Banner } from "../ui";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -58,9 +58,6 @@ export function Login() {
             {submitting ? "Signing in..." : "Log In"}
           </Btn>
         </form>
-        <Concept className="text-center mt-4">
-          Auth verification uses bcrypt hash checking & JWT session token (7d)
-        </Concept>
         <p className="text-center text-xs text-muted mt-4">
           Don't have an account?{" "}
           <Link to="/register" className="text-accent hover:underline font-medium">
@@ -137,9 +134,6 @@ export function Register() {
             {submitting ? "Creating account..." : "Register"}
           </Btn>
         </form>
-        <Concept className="text-center mt-4">
-          Unique username and email enforced by UNIQUE constraint (23505)
-        </Concept>
         <p className="text-center text-xs text-muted mt-4">
           Already have an account?{" "}
           <Link to="/login" className="text-accent hover:underline font-medium">

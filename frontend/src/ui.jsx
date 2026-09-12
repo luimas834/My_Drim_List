@@ -26,7 +26,7 @@ export function Banner({ type = "ok", message, children }) {
 }
 
 export function Concept({ children, className = "" }) {
-  return <p className={`concept ${className}`}>{children}</p>;
+  return null;
 }
 
 export function Loading({ text = "Loading..." }) {
@@ -38,14 +38,13 @@ export function Loading({ text = "Loading..." }) {
   );
 }
 
-export function Stat({ label, value, concept }) {
+export function Stat({ label, value }) {
   return (
     <div className="card flex flex-col justify-between">
       <div>
         <span className="text-xs uppercase tracking-wider text-muted font-semibold block mb-1">{label}</span>
         <span className="text-2xl font-bold text-accent">{value ?? "—"}</span>
       </div>
-      {concept && <Concept>{concept}</Concept>}
     </div>
   );
 }

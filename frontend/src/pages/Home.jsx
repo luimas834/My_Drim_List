@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Api, useFetch } from "../api";
-import { AnimeCard, Loading, Banner, Concept, Btn } from "../ui";
+import { AnimeCard, Loading, Banner, Btn } from "../ui";
 
 export default function Home() {
   const trendingFetch = useFetch(() => Api.trending());
@@ -36,7 +36,6 @@ export default function Home() {
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-xl font-bold text-accent">Trending This Week</h2>
-          <Concept>Multi-JOIN + 7-day window aggregation in SQL</Concept>
         </div>
         {trendingFetch.data && trendingFetch.data.length > 0 ? (
           <div className="grid-cards">
@@ -54,13 +53,7 @@ export default function Home() {
         <div className="flex items-baseline justify-between">
           <div>
             <h2 className="text-xl font-bold text-accent">Top Anime by Genre</h2>
-            <Concept>
-              Pre-ranked rows from MATERIALIZED VIEW top_by_genre using RANK() OVER (PARTITION BY genre_id)
-            </Concept>
           </div>
-          <Link to="/demo" className="text-xs text-accent hover:underline font-medium">
-            View stale / refresh in /demo →
-          </Link>
         </div>
 
         {genreGroups.slice(0, visibleGenreCount).map((group) => (
@@ -93,10 +86,6 @@ export default function Home() {
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-bold text-accent">Top Studios</h2>
-            <Concept>
-              get_top_studios() over studio_card_view — aggregate across the anime_studios bridge,
-              RANK() window, HAVING-style minimum so a one-hit studio can't top the table
-            </Concept>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {studiosFetch.data.map((s) => (
@@ -126,7 +115,6 @@ export default function Home() {
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-bold text-accent">Latest Episode Discussions</h2>
-            <Concept>get_recent_discussions() — comment ⋈ user ⋈ episode ⋈ anime in one call</Concept>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {discussionsFetch.data.map((d) => (

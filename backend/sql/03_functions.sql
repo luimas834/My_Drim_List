@@ -14,6 +14,7 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 -- ========== B. RECOMMENDATIONS (explicit CURSOR + temp table) ==========
+DROP FUNCTION IF EXISTS recommend_anime(INT);
 CREATE OR REPLACE FUNCTION recommend_anime(p_user_id INT)
 RETURNS TABLE(
     anime_id INT,
