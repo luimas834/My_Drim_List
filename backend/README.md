@@ -201,3 +201,63 @@ The authentication middleware verifies the token and sets:
 
 ```text
 req.userId
+
+Supported query concepts include:
+
+```text
+page
+q
+genre
+studio
+year
+status
+sort
+```
+
+Example:
+
+```text
+GET /api/anime?page=1&q=naruto&genre=Action
+```
+
+The database performs catalogue filtering, sorting, searching, and pagination.
+
+---
+
+## 🧭 Anime genres
+
+```text
+GET /api/anime/genres
+```
+
+Returns genre information with counts for use by the catalogue/filter interface.
+
+---
+
+## 🔥 Trending anime
+
+```text
+GET /api/anime/trending
+```
+
+The database computes trending information using activity data and a seven-day activity window.
+
+---
+
+## 🏆 Top anime
+
+```text
+GET /api/anime/top?genre=
+```
+
+The endpoint reads from the:
+
+```text
+top_by_genre
+```
+
+materialized view.
+
+Administrators can refresh the materialized view through the admin API.
+
+---
