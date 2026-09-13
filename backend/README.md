@@ -22,3 +22,32 @@ Its main responsibilities are:
 The backend intentionally does **not** use an ORM.
 
 The database is the primary business-logic layer.
+
+```text
+┌──────────────────────────────┐
+│        React Frontend        │
+│                              │
+│  UI + Axios + React Router   │
+└──────────────┬───────────────┘
+               │ HTTP / JSON
+               ▼
+┌──────────────────────────────┐
+│      Node.js + Express       │
+│                              │
+│  Routes                      │
+│  JWT authentication          │
+│  Authorization               │
+│  Parameterized SQL           │
+│  Error translation           │
+└──────────────┬───────────────┘
+               │ SQL
+               ▼
+┌──────────────────────────────┐
+│         PostgreSQL           │
+│                              │
+│ Tables / Constraints         │
+│ Triggers / Functions         │
+│ Procedures / Views           │
+│ Materialized Views           │
+└──────────────────────────────┘
+```
