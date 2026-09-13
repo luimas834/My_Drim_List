@@ -166,3 +166,38 @@ DATABASE_URL
 ```
 
 The backend sends parameterized SQL to PostgreSQL.
+
+For example, application values should be passed as parameters rather than concatenated into SQL strings.
+
+Conceptually:
+
+```text
+SQL:    SELECT ... WHERE user_id = $1
+Value:  authenticated user ID
+```
+
+This keeps SQL execution safer and preserves the database-first design.
+
+---
+
+## 🔑 Authentication
+
+Authentication is implemented with:
+
+```text
+bcryptjs
+jsonwebtoken
+```
+
+Passwords are hashed with bcrypt.
+
+JWTs are valid for:
+
+```text
+7 days
+```
+
+The authentication middleware verifies the token and sets:
+
+```text
+req.userId
