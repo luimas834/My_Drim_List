@@ -126,3 +126,43 @@ cp backend/.env.example backend/.env
 npm run setup
 npm run dev
 ```
+he development environment uses:
+
+```text
+Backend  → :4000
+Frontend → :5173
+```
+
+---
+
+## 🔐 Environment configuration
+
+The backend environment contains database and authentication configuration.
+
+Example:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mdl
+JWT_SECRET=change_this_to_a_long_random_string
+PORT=4000
+```
+
+The actual secret should be changed for real deployments.
+
+The backend owns these credentials.
+
+They must never be placed in frontend code.
+
+---
+
+## 🗄️ PostgreSQL connection
+
+The backend uses the `pg` Node.js driver.
+
+The connection is based on:
+
+```text
+DATABASE_URL
+```
+
+The backend sends parameterized SQL to PostgreSQL.
