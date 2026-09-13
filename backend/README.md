@@ -51,3 +51,44 @@ The database is the primary business-logic layer.
 │ Materialized Views           │
 └──────────────────────────────┘
 ```
+The backend is deliberately a **thin messenger**.
+
+---
+
+## 🛠️ Technology stack
+
+| Technology | Purpose |
+|---|---|
+| **Node.js 18+** | Backend runtime |
+| **Express** | HTTP server and routing |
+| **pg** | PostgreSQL driver |
+| **jsonwebtoken** | JWT authentication |
+| **bcryptjs** | Password hashing |
+| **PostgreSQL 14+** | Database and business-logic layer |
+| **Jikan API** | Anime catalogue data source |
+
+---
+
+## 🧠 Architectural philosophy
+
+The project's core design is:
+
+> **Thin backend, fat database**
+
+Instead of putting application rules into JavaScript service classes, MDL places important rules directly in PostgreSQL.
+
+The backend generally follows:
+
+```text
+HTTP request
+    ↓
+Authentication
+    ↓
+Parameterized SQL
+    ↓
+PostgreSQL
+    ↓
+JSON response
+```
+
+The backend does not duplicate database business rules.
