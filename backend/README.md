@@ -92,3 +92,37 @@ JSON response
 ```
 
 The backend does not duplicate database business rules.
+
+##  Why no ORM?
+
+MDL is a DBMS-II project designed to demonstrate database features directly.
+
+Using raw SQL and PostgreSQL objects makes the database implementation visible.
+
+The project uses:
+
+- Raw SQL.
+- PL/pgSQL functions.
+- Procedures.
+- Triggers.
+- Views.
+- Materialized views.
+- Cursors.
+- Window functions.
+- Full-text search.
+- Keyset pagination.
+
+The `pg` driver connects Node.js directly to PostgreSQL.
+
+---
+
+## ⚡ Quick start
+
+From the repository root:
+
+```bash
+createdb mdl
+cp backend/.env.example backend/.env
+npm run setup
+npm run dev
+```
